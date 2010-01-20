@@ -1,14 +1,4 @@
 /* $Id$ */
-/******************************************************************/
-/* This is the wrapper function for to RunCode.R. Its inputs are  */
-/* R = number of replicates, P = number of genes, T = number of   */
-/* times, K = number of hidden states (0 means no x's estimated), */
-/* x0 = initial values of x, yorig = gene expression, a0-sigma0=  */
-/* initial values of alpha-sigma, conv1-conv3 = convergence       */
-/* criterai, DEst and DvarEst will return the value of the        */
-/* posterior mean and variance of D.                              */
-/******************************************************************/
-
 #include <stdlib.h>
 #include <stddef.h>
 #include <time.h>
@@ -20,38 +10,51 @@
 #include <Rdefines.h>
 #include <R_ext/Lapack.h>
 #include <R_ext/BLAS.h>
-
 /* Load global subprograms */
 void MatrixInv(double**, int, double**, double*);
 void MatrixMult(double**, int, int, double**, int, double**);
 void MatrixSum(double**, double**, double**, int*, int*);
 void MatrixTrans(double**, double**, int*, int*);
 
-void RunWrap(int *R, int *P, int *T, int *K, double *xx,
-    double *yy, double *alpha, double *beta, double *gamma,
+/******************************************************************/
+/* This is the wrapper function for to RunCode.R. Its inputs are  */
+/* R = number of replicates, P = number of genes, T = number of   */
+/* times, K = number of hidden states (0 means no x's estimated), */
+/* x0 = initial values of x, yorig = gene expression, a0-sigma0=  */
+/* initial values of alpha-sigma, conv1-conv3 = convergence       */
+/* criterai, DEst and DvarEst will return the value of the        */
+/* posterior mean and variance of D.                              */
+/******************************************************************/
+
+void RunWrapGen(int *R, int *P, int *T, int *K, int *M, double *xx,
+    double *yy, double *uu, double *alpha, double *beta, double *gamma,
     double *delta, double *v, double *mu, double *sigma,
     double *conv1, double *conv2, double *conv3,
     double *APost, double *BPost, double *CPost, double *DPost,
     double *CvarPost, double *DvarPost, int *alliterations, int *maxiterations,
-    int *subiterations)
+    int *subiterations, int *verboseInd)
 {
-
     /* Load subprograms */
-    void RunCode(int*, int*, int*, int*, double*, double*, double*,
-        double*, double*, double*, double*, double*, double*,
-        double*, double*, double*, double*, double*, double*, double*, double*, double*, int*, int*, int*);
+    void RunCode(int*, int*, int*, int*, int*, double*, double*, double*, double*, double*, double*,
+    	double*, double*, double*, double*, double*, double*, double*, double*, double*, double*,
+        double*, double*, double*, int*, int*, int*, int*);
 
-    RunCode(R, P, T, K, xx, yy, alpha, beta, gamma, delta, v, mu,
+    if(*verboseInd == 1) {
+        Rprintf("Running EBDBN algorithm ...\n");
+        Rprintf("\n");
+        if(*K > 0) {Rprintf("Iterations:\n");}
+    }
+
+    RunCode(R, P, T, K, M, xx, yy, uu, alpha, beta, gamma, delta, v, mu,
         sigma, conv1, conv2, conv3, APost, BPost, CPost, DPost, CvarPost, DvarPost, alliterations, maxiterations,
-        subiterations);
-
+        subiterations, verboseInd);
 }
 
 /* Include other programs */
 
 /******************************************************************/
 /*  This is the counterpart of Overall_Posterior_Mean.R. It has   */
-/*  inputs alpha, beta, gamma, delta, v, x, y, K, P, T, and R     */
+/*  inputs alpha, beta, gamma, delta, v, x, y, u, K, P, T, R, & M */
 /*  and returns the value of the overall posterior mean of A, B,  */
 /*  C, and D (in the case where x's are estimated), or the        */
 /*  overall posterior mean and variance of D (in the case where   */
@@ -59,25 +62,22 @@ void RunWrap(int *R, int *P, int *T, int *K, double *xx,
 /******************************************************************/
 
 void PostMeanOverall(double *alpha, double *beta, double *gamma, double *delta,
-	double *v, double ***x, double ***y, int *K, int *P, int *T,
-	int *R, double *AA, double *BB, double *CC, double *DD, double *CCvar, double *DDvar)
+	double *v, double ***x, double ***y, double ***u, int *K, int *P, int *T,
+	int *R, int *M, double *AA, double *BB, double *CC, double *DD, double *CCvar, double *DDvar)
 {
-
-	int i, ii, iii, *all, j, jj, index, *KK, index2;
+	int i, *all, j, jj, index, *KK, index2, m, mm;
     double **MNLNinv, **LNMNinv, **JGFGinv, **FGJGinv, ***HNLS,
-            ***SNMH, ***EGFQ, ***QGJE, **matk1, **matp1, **Dvartemp,
+            ***SNMH, ***EGFQ, ***QGJE, **matk1, **matm1, **Dvartemp,
             **D, ***Dvar, ***Cvar, **C, **B, **A;
 
 	/* Load subprograms */
-
-	void SimplifyNoX(double*, double*, double***, int*, int*, int*, int*,
-        	double**, double**);
-	void SimplifyX(double*, double*, double*, double*, double*, double***,
-		double***, int*, int*, int*, int*, int*, double**, double**, double**,
-        	double**, double***, double***, double***,double***);
+	void SimplifyNoX(double*, double*, double***, double***, int*, int*, int*, int*, int*, double**,
+        double**);
+	void SimplifyX(double*, double*, double*, double*, double*, double***, double***, double***, int*,
+        int*, int*, int*, int*, int*, double**, double**, double**, double**, double***,
+        double***, double***, double***);
 
     /* Allocate memory */
-
 	all = (int*) calloc(1, sizeof(int));
 	KK = (int*) calloc(1, sizeof(int));
 	*all = 1;
@@ -86,70 +86,67 @@ void PostMeanOverall(double *alpha, double *beta, double *gamma, double *delta,
 	{
 	    *KK = *K;
 	}
-
 	A = (double**) calloc(*KK, sizeof(double*));
 	B = (double**) calloc(*KK, sizeof(double*));
-    	C = (double**) calloc(*P, sizeof(double*));
+    C = (double**) calloc(*P, sizeof(double*));
 	Cvar = (double***) calloc(*P, sizeof(double**));
 	D = (double**) calloc(*P, sizeof(double*));
 	Dvar = (double***) calloc(*P, sizeof(double**));
     for(j=0; j<*KK; j++)
 	{
 	    *(A+j) = (double*) calloc(*KK, sizeof(double));
-	    *(B+j) = (double*) calloc(*P, sizeof(double));
+	    *(B+j) = (double*) calloc(*M, sizeof(double));
 	}
 	for(i=0; i<*P; i++)
 	{
         *(C+i) = (double*) calloc(*KK, sizeof(double));
-	    *(D+i) = (double*) calloc(*P, sizeof(double));
-	    *(Dvar+i) = (double**) calloc(*P, sizeof(double*));
+	    *(D+i) = (double*) calloc(*M, sizeof(double));
+	    *(Dvar+i) = (double**) calloc(*M, sizeof(double*));
 	    *(Cvar+i) = (double**) calloc(*KK, sizeof(double*));
-	    for(ii=0; ii<*P; ii++)
+	    for(m=0; m<*M; m++)
 	    {
-	        *(*(Dvar+i)+ii) = (double*) calloc(*P, sizeof(double));
+	        *(*(Dvar+i)+m) = (double*) calloc(*M, sizeof(double));
 	    }
-	   for(j=0; j<*KK; j++)
-	   {
-		*(*(Cvar+i)+j) = (double*) calloc(*KK, sizeof(double));
-	   }
+        for(j=0; j<*KK; j++)
+        {
+            *(*(Cvar+i)+j) = (double*) calloc(*KK, sizeof(double));
+        }
 	}
-
-	/* Begin function -- no x's */
-
-    Dvartemp = (double**) calloc(*P, sizeof(double*));
-    for(i=0; i<*P; i++)
+    Dvartemp = (double**) calloc(*M, sizeof(double*));
+    for(m=0; m<*M; m++)
     {
-        *(Dvartemp+i) = (double*) calloc(*P, sizeof(double));
+        *(Dvartemp+m) = (double*) calloc(*M, sizeof(double));
     }
 
+    /* Begin function -- no x's */
 	if(*K==0)
 	{
-        SimplifyNoX(delta, v, y, P, T, R, all, D, Dvartemp);
+        SimplifyNoX(delta, v, y, u, P, T, M, R, all, D, Dvartemp);
         for(i=0; i<*P; i++)
         {
-            for(ii=0; ii<*P; ii++)
+            for(m=0; m<*M; m++)
             {
-                for(iii=0; iii<*P; iii++)
+                for(mm=0; mm<*M; mm++)
                 {
-                    *(*(*(Dvar+i)+ii)+iii) = (1.0/(*(v+i))) * (*(*(Dvartemp+ii)+iii));
+                    *(*(*(Dvar+i)+m)+mm) = (1.0/(*(v+i))) * (*(*(Dvartemp+m)+mm));
                 }
             }
         }
 	}
 
     /* Free memory */
-    for(i=0; i<*P; i++)
+    for(m=0; m<*M; m++)
     {
-        free(*(Dvartemp+i));
+        free(*(Dvartemp+m));
     }
     free(Dvartemp);
 
 	/* Begin function -- x's */
     /* Allocate MNLNinf, LNMNinf, JGFGinv, FGJGinv, HNLS, SNMH, EGFQ, QFJE */
     MNLNinv = (double**) calloc(*KK, sizeof(double*));
-    LNMNinv = (double**) calloc(*P, sizeof(double*));
+    LNMNinv = (double**) calloc(*M, sizeof(double*));
     JGFGinv = (double**) calloc(*KK, sizeof(double*));
-    FGJGinv = (double**) calloc(*P, sizeof(double*));
+    FGJGinv = (double**) calloc(*M, sizeof(double*));
     HNLS = (double***) calloc(*KK, sizeof(double**));
     SNMH = (double***) calloc(*KK, sizeof(double**));
     EGFQ = (double***) calloc(*P, sizeof(double**));
@@ -159,115 +156,117 @@ void PostMeanOverall(double *alpha, double *beta, double *gamma, double *delta,
         *(MNLNinv+j) = (double*) calloc(*KK, sizeof(double));
         *(JGFGinv+j) = (double*) calloc(*KK, sizeof(double));
         *(HNLS+j) = (double**) calloc(*KK, sizeof(double*));
-        *(SNMH+j) = (double**) calloc(*P, sizeof(double*));
+        *(SNMH+j) = (double**) calloc(*M, sizeof(double*));
         for(jj=0; jj<*KK; jj++)
         {
             *(*(HNLS+j)+jj) = (double*) calloc(1, sizeof(double));
         }
-        for(i=0; i<*P; i++)
+        for(m=0; m<*M; m++)
         {
-            *(*(SNMH+j)+i) = (double*) calloc(1, sizeof(double));
+            *(*(SNMH+j)+m) = (double*) calloc(1, sizeof(double));
         }
+    }
+    for(m=0; m<*M; m++)
+    {
+        *(LNMNinv+m) = (double*) calloc(*M, sizeof(double));
+        *(FGJGinv+m) = (double*) calloc(*M, sizeof(double));
     }
     for(i=0; i<*P; i++)
     {
-        *(LNMNinv+i) = (double*) calloc(*P, sizeof(double));
-        *(FGJGinv+i) = (double*) calloc(*P, sizeof(double));
         *(EGFQ+i) = (double**) calloc(*KK, sizeof(double*));
-        *(QGJE+i) = (double**) calloc(*P, sizeof(double*));
-
+        *(QGJE+i) = (double**) calloc(*M, sizeof(double*));
         for(j=0; j<*KK; j++)
         {
             *(*(EGFQ+i)+j) = (double*) calloc(1, sizeof(double));
         }
-        for(ii=0; ii<*P; ii++)
+        for(m=0; m<*M; m++)
         {
-            *(*(QGJE+i)+ii) = (double*) calloc(1, sizeof(double));
+            *(*(QGJE+i)+m) = (double*) calloc(1, sizeof(double));
         }
     }
     matk1 = (double**) calloc(*KK, sizeof(double*));
-    matp1 = (double**) calloc(*P, sizeof(double*));
+    matm1 = (double**) calloc(*M, sizeof(double*));
     for(j=0; j<*KK; j++)
     {
         *(matk1+j) = (double*) calloc(1, sizeof(double));
     }
-    for(i=0; i<*P; i++)
+    for(m=0; m<*M; m++)
     {
-        *(matp1+i) = (double*) calloc(1, sizeof(double));
+        *(matm1+m) = (double*) calloc(1, sizeof(double));
     }
 
 	if(*K > 0)
 	{
-        SimplifyX(alpha, beta, gamma, delta, v, x, y, K, P, T, all, R,
-            MNLNinv, LNMNinv, JGFGinv, FGJGinv, HNLS, SNMH, EGFQ,QGJE);
-
+        SimplifyX(alpha, beta, gamma, delta, v, x, y, u, K, P, T, M, all, R,
+            MNLNinv, LNMNinv, JGFGinv, FGJGinv, HNLS, SNMH, EGFQ, QGJE);
         for(j=0; j<*K; j++)
         {
             MatrixMult(MNLNinv, *K, *K, *(HNLS+j), 1, matk1);
-            MatrixMult(LNMNinv, *P, *P, *(SNMH+j), 1, matp1);
+            MatrixMult(LNMNinv, *M, *M, *(SNMH+j), 1, matm1);
             for(jj=0; jj<*K; jj++)
             {
                 *(*(A+j)+jj) = *(*(matk1+jj));
             }
-            for(i=0; i<*P; i++)
+            for(m=0; m<*M; m++)
             {
-                *(*(B+j)+i) = *(*(matp1+i));
+                *(*(B+j)+m) = *(*(matm1+m));
             }
         }
 
         for(i=0; i<*P; i++)
         {
-            MatrixMult(FGJGinv, *P, *P, *(QGJE+i), 1, matp1);
+            MatrixMult(FGJGinv, *M, *M, *(QGJE+i), 1, matm1);
             MatrixMult(JGFGinv, *K, *K, *(EGFQ+i), 1, matk1);
-            for(ii=0; ii<*P; ii++)
+            for(m=0; m<*M; m++)
             {
-                *(*(D+i)+ii) = *(*(matp1+ii));
-                for(iii=0; iii<*P; iii++)
+                *(*(D+i)+m) = *(*(matm1+m));
+                for(mm=0; mm<*M; mm++)
                 {
-                    *(*(*(Dvar+i)+ii)+iii) = (1.0/(*(v+i))) * (*(*(FGJGinv+ii)+iii));
+                    *(*(*(Dvar+i)+m)+mm) = (1.0/(*(v+i))) * (*(*(FGJGinv+m)+mm));
                 }
             }
             for(j=0; j<*K; j++)
             {
                *(*(C+i)+j) =  *(*(matk1+j));
-		for(jj=0; jj<*K; jj++)
-		{
-			*(*(*(Cvar+i)+j)+jj) = (1.0/(*(v+i))) * (*(*(JGFGinv+j)+jj));
-		}
+                for(jj=0; jj<*K; jj++)
+                {
+                    *(*(*(Cvar+i)+j)+jj) = (1.0/(*(v+i))) * (*(*(JGFGinv+j)+jj));
+                }
             }
         }
 	}
 
-	/* Set DD = D, CC = C, CCvar = Cvar, and DDvar = Dvar */
+	/* Set CCvar = Cvar, and DDvar = Dvar */
 	index = 0;
 	index2 = 0;
 	for(i=0; i<*P; i++)
 	{
-	    for(ii=0; ii<*P; ii++)
+	    for(m=0; m<*M; m++)
 	    {
-	        for(iii=0; iii<*P; iii++)
+	        for(mm=0; mm<*M; mm++)
 	        {
-	           *(DDvar+index) = *(*(*(Dvar+i)+ii)+iii);
+	           *(DDvar+index) = *(*(*(Dvar+i)+m)+mm);
 	           index++;
 	        }
 	    }
 	    for(j=0; j<*K; j++)
 	    {
-		for(jj=0; jj<*K; jj++)
-		{
-			*(CCvar+index2) = *(*(*(Cvar+i)+j)+jj);
-			index2++;
-		}
+            for(jj=0; jj<*K; jj++)
+            {
+                *(CCvar+index2) = *(*(*(Cvar+i)+j)+jj);
+                index2++;
+            }
 	    }
 	}
 
+	/* Set CC = C, and DD = D */
 	index = 0;
 	index2 = 0;
 	for(i=0; i<*P; i++)
 	{
-	    for(ii=0; ii<*P; ii++)
+	    for(m=0; m<*M; m++)
 	    {
-	        *(DD + index) = *(*(D+i)+ii);
+	        *(DD + index) = *(*(D+i)+m);
 	        index++;
 	    }
 	    for(j=0; j<*K; j++)
@@ -276,6 +275,8 @@ void PostMeanOverall(double *alpha, double *beta, double *gamma, double *delta,
 		index2++;
 	    }
 	}
+
+    /* Set AA = A, BB = B */
 	index = 0;
     index2 = 0;
     for(j=0; j<*K; j++)
@@ -285,45 +286,56 @@ void PostMeanOverall(double *alpha, double *beta, double *gamma, double *delta,
             *(AA + index) = *(*(A+j)+jj);
             index++;
         }
-        for(i=0; i<*P; i++)
+        for(m=0; m<*M; m++)
         {
-            *(BB + index2) = *(*(B+j)+i);
+            *(BB + index2) = *(*(B+j)+m);
             index2++;
         }
     }
 
 	/* Free memory */
-	/* If x's */
     for(j=0; j<*KK; j++)
     {
         for(jj=0; jj<*KK; jj++)
         {
             free(*(*(HNLS+j)+jj));
         }
-        for(i=0; i<*P; i++)
+        for(m=0; m<*M; m++)
         {
-            free(*(*(SNMH+j)+i));
+            free(*(*(SNMH+j)+m));
         }
         free(*(HNLS+j));
         free(*(SNMH+j));
         free(*(MNLNinv+j));
         free(*(JGFGinv+j));
+        free(*(matk1+j));
+        free(*(A+j));
+	    free(*(B+j));
     }
-
     for(i=0; i<*P; i++)
     {
         for(j=0; j<*KK; j++)
         {
             free(*(*(EGFQ+i)+j));
+            free(*(*(Cvar+i)+j));
         }
-        for(ii=0; ii<*P; ii++)
+        for(m=0; m<*M; m++)
         {
-            free(*(*(QGJE+i)+ii));
+            free(*(*(QGJE+i)+m));
+            free(*(*(Dvar+i)+m));
         }
         free(*(EGFQ+i));
         free(*(QGJE+i));
-        free(*(LNMNinv+i));
-        free(*(FGJGinv+i));
+	    free(*(Cvar+i));
+	    free(*(Dvar+i));
+	    free(*(D+i));
+        free(*(C+i));
+    }
+    for(m=0; m<*M; m++)
+    {
+        free(*(LNMNinv+m));
+        free(*(FGJGinv+m));
+        free(*(matm1+m));
     }
     free(HNLS);
     free(SNMH);
@@ -333,79 +345,45 @@ void PostMeanOverall(double *alpha, double *beta, double *gamma, double *delta,
     free(QGJE);
     free(LNMNinv);
     free(FGJGinv);
-
-    for(j=0; j<*KK; j++)
-    {
-        free(*(matk1+j));
-    }
-    for(i=0; i<*P; i++)
-    {
-        free(*(matp1+i));
-    }
     free(matk1);
-    free(matp1);
-
-	/* Release memory of D's */
-    for(j=0; j<*KK; j++)
-	{
-	    free(*(A+j));
-	    free(*(B+j));
-	}
-	for(i=0; i<*P; i++)
-	{
-	    for(ii=0; ii<*P; ii++)
-	    {
-	        free(*(*(Dvar+i)+ii));
-	    }
-	    for(j=0; j<*KK; j++)
-	    {
-		free(*(*(Cvar+i)+j));
-	    }
-	    free(*(Cvar+i));
-	    free(*(Dvar+i));
-	    free(*(D+i));
-        free(*(C+i));
-	}
+    free(matm1);
 	free(Cvar);
 	free(Dvar);
 	free(D);
-    	free(C);
+    free(C);
 	free(KK);
 	free(all);
-    	free(A);
-    	free(B);
+    free(A);
+    free(B);
+
 }
-
-
-
 
 /******************************************************************/
 /* This is counterpart to RunCode.R.  It takes as inputs          */
 /* R = number of replicates, P = number of genes, T = number of   */
 /* times, K = number of hidden states (0 means no x's estimated), */
-/* x0 = initial values of x, yorig = gene expression, a0-sigma0=  */
+/* M = dimension of input variable,                               */
+/* xx = initial values of x, yy = gene expression, a-sigma=       */
 /* initial values of alpha-sigma, conv1-conv3 = convergence       */
 /* criteria, DPost and DvarPost will return the value of the      */
 /* posterior mean and variance of D.                              */
 /* ****************************************************************/
-
-void RunCode(int *R, int *P, int *T, int *K, double *xx,
-    double *yy, double *alpha, double *beta, double *gamma,
+void RunCode(int *R, int *P, int *T, int *K, int *M, double *xx,
+    double *yy, double *uu, double *alpha, double *beta, double *gamma,
     double *delta, double *v, double *mu, double *sigma,
     double *conv1, double *conv2, double *conv3,
     double *APost, double *BPost, double *CPost, double *DPost, double *CvarPost,
-    double *DvarPost, int *alliterations, int *maxiterations, int *subiterations)
+    double *DvarPost, int *alliterations, int *maxiterations, int *subiterations,
+    int *verboseInd)
 {
-    int i, j, r, t, index, *KK;
-    double ***x, ***y;
+    int i, j, r, t, index, *KK, m;
+    double ***x, ***y, ***u;
 
     /* Load subprograms */
-    void FullAlgorithm(double***, double***, double*, double*,
-        double*, double*, double*, double*, double*, int*, int*,
-        int*, int*, double*, double*, double*, int*, int*, int*);
-    void PostMeanOverall(double*, double*, double*, double*,
-        double*, double***, double***, int*, int*, int*, int*, double*, double*,
-        double*, double*, double*, double*);
+    void FullAlgorithm(double***, double***, double***, double*, double*, double*, double*, double*,
+        double*, double*, int*, int*, int*, int*, int*, double*, double*, double*, int*, int*, int*, int*);
+    void PostMeanOverall(double*, double*, double*, double*, double*, double***, double***, double***,
+        int*, int*, int*, int*, int*, double*, double*, double*, double*, double*, double*);
 
     /* Allocate y, read in data */
     y = (double***) calloc(*R, sizeof(double**));
@@ -429,7 +407,7 @@ void RunCode(int *R, int *P, int *T, int *K, double *xx,
         }
     }
 
-    /* Allocate x's if K > 0, read in data */
+    /* Allocate x's, read in data */
     x = (double***) calloc(*R, sizeof(double**));
     for(r=0; r<*R; r++)
     {
@@ -439,7 +417,6 @@ void RunCode(int *R, int *P, int *T, int *K, double *xx,
             *(*(x+r)+j) = (double*) calloc(*T, sizeof(double));
         }
     }
-
     index = 0;
     if(*K > 0)
     {
@@ -456,20 +433,41 @@ void RunCode(int *R, int *P, int *T, int *K, double *xx,
         }
     }
 
+    /* Allocate u's, read in data */
+    u = (double***) calloc(*R, sizeof(double**));
+    index = 0;
+    for(r=0; r<*R; r++)
+    {
+        *(u+r) = (double**) calloc(*M, sizeof(double*));
+        for(m=0; m<*M; m++)
+        {
+            *(*(u+r)+m) = (double*) calloc(*T, sizeof(double));
+            for(t=0; t<*T; t++)
+            {
+                *(*(*(u+r)+m)+t) = *(uu+index);
+                index++;
+            }
+        }
+    }
 
     /*****************************/
     /*  Run Full algorithm       */
     /*****************************/
 
-    FullAlgorithm(y, x, alpha, beta, gamma, delta, v, mu, sigma,
-        K, P, R, T, conv1, conv2, conv3, alliterations, maxiterations, subiterations);
-   /* Rprintf("\n"); */
+    FullAlgorithm(y, x, u, alpha, beta, gamma, delta, v, mu, sigma,
+        K, P, R, T, M, conv1, conv2, conv3, alliterations, maxiterations, subiterations,
+        verboseInd);
 
     /****************************************/
     /*  Find posterior mean & variance      */
     /****************************************/
 
-    PostMeanOverall(alpha, beta, gamma, delta, v, x, y, K, P, T, R, APost, BPost, CPost, DPost, CvarPost, DvarPost);
+    if(*verboseInd == 1)
+    {
+        Rprintf("EBDBN Algorithm complete! \n");
+    }
+
+    PostMeanOverall(alpha, beta, gamma, delta, v, x, y, u, K, P, T, R, M, APost, BPost, CPost, DPost, CvarPost, DvarPost);
 
     /* Read in final estimate of x's */
     if(*K > 0)
@@ -488,7 +486,7 @@ void RunCode(int *R, int *P, int *T, int *K, double *xx,
         }
     }
 
-    /* Release memory of x's if K > 0 */
+    /* Release memory of x's */
     for(r=0; r<*R; r++)
     {
         for(j=0; j<*KK; j++)
@@ -509,32 +507,49 @@ void RunCode(int *R, int *P, int *T, int *K, double *xx,
         free(*(y+r));
     }
     free(y);
+
+    /* Release memory of u's */
+    for(r=0; r<*R; r++)
+    {
+        for(m=0; m<*M; m++)
+        {
+            free(*(*(u+r)+m));
+        }
+        free(*(u+r));
+    }
+    free(u);
     free(KK);
 }
 
-
-
-void FullAlgorithm(double ***y, double ***x, double *alpha,
+/******************************************************************/
+/* FullAlgorithm implements the EBDBN algorithm.  It has as       */
+/* arguments y = gene expression, x = hidden states, u = inputs,  */
+/* alpha - sigma = hyperparameter initial values, K = hidden state*/
+/* dimension, P = # of genes, R = # of replicates, T = time pts,  */
+/* M = dimension of inputs, conv1 - conv3 = convergence criteria, */
+/* alliterations = count of total iterations, maxiterations =     */
+/* maximum number of allowed overall iterations, subiterations =  */
+/* maximum number of allowed iterations in EM-type algorithm      */
+/* ****************************************************************/
+void FullAlgorithm(double ***y, double ***x, double ***u, double *alpha,
     double *beta, double *gamma, double *delta, double *v,
-    double *mu, double *sigma, int *K, int *P, int *R, int *T,
+    double *mu, double *sigma, int *K, int *P, int *R, int *T, int *M,
     double *conv1, double *conv2, double *conv3, int *alliterations, int *maxiterations,
-    int *subiterations)
+    int *subiterations, int *verboseInd)
 {
-    int iter=1, j, i, r, *KK;
+    int iter=1, j, i, r, *KK, m;
     double overalldiff, ***A, ***B, ***C, ***D, ***Dvar,
         *alpha0, *beta0, *gamma0, *delta0, *v0,
         *alphaold, *betaold, *gammaold, *deltaold, *vold;
     double alphadiff, betadiff, gammadiff, deltadiff, sumnum, sumden;
 
     /* Load subprograms */
-    void EmTypeConv(double*, double*, double*, double*, double*,
-        double***, double***, int*, int*, int*, int*, double*, double*, int*);
-    void PostMeanR(double*, double*, double*, double*, double*, double***,
-        double***, int*, int*, int*, int*, double***, double***,
-        double***, double***, double***);
-    void Kalman(double***, double***, double***, double***, double***,
-        double*, double*, double*, int*, int*, int*, int*, double***);
-
+    void EmTypeConv(double*, double*, double*, double*, double*, double***, double***, double***,
+        int*, int*, int*, int*, int*, double*, double*, int*);
+    void PostMeanR(double*, double*, double*, double*, double*, double***, double***, double***, int*,
+        int*, int*, int*, int*, double***, double***, double***, double***, double***);
+    void Kalman(double***, double***, double***, double***, double***, double*, double*, double*, int*,
+        int*, int*, int*, int*, double***, double***);
 
     /* Allocate memory */
     KK = (int*) calloc(1, sizeof(int));
@@ -542,7 +557,6 @@ void FullAlgorithm(double ***y, double ***x, double *alpha,
     if(*K > 0) {
         *KK = *K;
     }
-
     A = (double***) calloc(*R, sizeof(double**));
     B = (double***) calloc(*R, sizeof(double**));
     C = (double***) calloc(*R, sizeof(double**));
@@ -554,35 +568,37 @@ void FullAlgorithm(double ***y, double ***x, double *alpha,
         *(B+r) = (double**) calloc(*KK, sizeof(double*));
         *(C+r) = (double**) calloc(*P, sizeof(double*));
         *(D+r) = (double**) calloc(*P, sizeof(double*));
-        *(Dvar+r) = (double**) calloc(*P, sizeof(double*));
+        *(Dvar+r) = (double**) calloc(*M, sizeof(double*));
         for(j=0; j<*KK; j++)
         {
             *(*(A+r)+j) = (double*) calloc(*KK, sizeof(double));
-            *(*(B+r)+j) = (double*) calloc(*P, sizeof(double));
+            *(*(B+r)+j) = (double*) calloc(*M, sizeof(double));
         }
         for(i=0; i<*P; i++)
         {
             *(*(C+r)+i) = (double*) calloc(*KK, sizeof(double));
-            *(*(D+r)+i) = (double*) calloc(*P, sizeof(double));
-            *(*(Dvar+r)+i) = (double*) calloc(*P, sizeof(double));
+            *(*(D+r)+i) = (double*) calloc(*M, sizeof(double));
+        }
+        for(m=0; m<*M; m++)
+        {
+            *(*(Dvar+r)+m) = (double*) calloc(*M, sizeof(double));
         }
     }
     alpha0 = (double*) calloc(*KK, sizeof(double));
-    beta0 = (double*) calloc(*P, sizeof(double));
+    beta0 = (double*) calloc(*M, sizeof(double));
     gamma0 = (double*) calloc(*KK, sizeof(double));
-    delta0 = (double*) calloc(*P, sizeof(double));
+    delta0 = (double*) calloc(*M, sizeof(double));
     v0 = (double*) calloc(*P, sizeof(double));
     alphaold = (double*) calloc(*KK, sizeof(double));
-    betaold = (double*) calloc(*P, sizeof(double));
+    betaold = (double*) calloc(*M, sizeof(double));
     gammaold = (double*) calloc(*KK, sizeof(double));
-    deltaold = (double*) calloc(*P, sizeof(double));
+    deltaold = (double*) calloc(*M, sizeof(double));
     vold = (double*) calloc(*P, sizeof(double));
-
 
     /* If no x's */
     if(*K == 0)
     {
-        EmTypeConv(alpha, beta, gamma, delta, v, x, y, K, P, T, R, conv1, conv2, subiterations);
+        EmTypeConv(alpha, beta, gamma, delta, v, x, y, u, K, P, T, R, M, conv1, conv2, subiterations);
     }
 
     /* If x estimates */
@@ -602,13 +618,16 @@ void FullAlgorithm(double ***y, double ***x, double *alpha,
             *(alpha0+j) = *(alpha+j);
             *(gamma0+j) = *(gamma+j);
         }
+        for(m=0; m<*M; m++)
+        {
+            *(beta0+m) = *(beta+m);
+            *(delta0+m) = *(delta+m);
+        }
         for(i=0; i<*P; i++)
         {
-            *(beta0+i) = *(beta+i);
-            *(delta0+i) = *(delta+i);
             *(v0+i) = *(v+i);
         }
-        EmTypeConv(alpha, beta, gamma, delta, v, x, y, K, P, T, R,
+        EmTypeConv(alpha, beta, gamma, delta, v, x, y, u, K, P, T, R, M,
             conv1, conv2, subiterations);
 
         for(j=0; j<*K; j++)
@@ -616,30 +635,31 @@ void FullAlgorithm(double ***y, double ***x, double *alpha,
             *(alphaold+j) = *(alpha+j);
             *(gammaold+j) = *(gamma+j);
         }
+        for(m=0; m<*M; m++)
+        {
+            *(betaold+m) = *(beta+m);
+            *(deltaold+m) = *(delta+m);
+        }
         for(i=0; i<*P; i++)
         {
-            *(betaold+i) = *(beta+i);
-            *(deltaold+i) = *(delta+i);
             *(vold+i) = *(v+i);
         }
-        Rprintf("0 ");
         overalldiff = 100.0;
 
         /**************************************************************************************/
         /* Stop if we reach convergence criterion OR if we get up to 100 overall iterations   */
         /* If we are over 100 iterations, we will start over with a new set of initial values */
         /**************************************************************************************/
-
         while(overalldiff > *conv3)
         {
             if(*alliterations > *maxiterations) break;
-            PostMeanR(alpha, beta, gamma, delta, v, x, y, K, P, T,
-                R, A, B, C, D, Dvar);
+            PostMeanR(alpha, beta, gamma, delta, v, x, y, u, K, P, T,
+                R, M, A, B, C, D, Dvar);
 
             /******************************************************/
             /*  Kalman filter and smoother estimates of x         */
             /******************************************************/
-            Kalman(y, A, B, C, D, v, mu, sigma, K, P, T, R, x);
+            Kalman(y, A, B, C, D, v, mu, sigma, K, P, T, R, M, x, u);
 
             /*  Normally we would re-estimate mu and sigma here */
 
@@ -653,13 +673,16 @@ void FullAlgorithm(double ***y, double ***x, double *alpha,
                 *(alpha+j) = *(alpha0+j);
                 *(gamma+j) = *(gamma0+j);
             }
+            for(m=0; m<*M; m++)
+            {
+                *(beta+m) = *(beta0+m);
+                *(delta+m) = *(delta0+m);
+            }
             for(i=0; i<*P; i++)
             {
-                *(beta+i) = *(beta0+i);
-                *(delta+i) = *(delta0+i);
                 *(v+i) = *(v0+i);
             }
-            EmTypeConv(alpha, beta, gamma, delta, v, x, y, K, P, T, R,
+            EmTypeConv(alpha, beta, gamma, delta, v, x, y, u, K, P, T, R, M,
                 conv1, conv2, subiterations);
 
             /******************************************************/
@@ -679,13 +702,13 @@ void FullAlgorithm(double ***y, double ***x, double *alpha,
 
             sumnum = 0;
             sumden = 0;
-            for(i=0; i<*P; i++)
+            for(m=0; m<*M; m++)
             {
-                sumden += (*(betaold+i)) * (*(betaold+i));
+                sumden += (*(betaold+m)) * (*(betaold+m));
             }
-            for(i=0; i<*P; i++)
+            for(m=0; m<*M; m++)
             {
-                sumnum += ((*(beta+i) - *(betaold+i))*(*(beta+i) - *(betaold+i)))/sumden;
+                sumnum += ((*(beta+m) - *(betaold+m))*(*(beta+m) - *(betaold+m)))/sumden;
             }
             betadiff = sqrt(sumnum);                                       /* beta.diff */
 
@@ -703,13 +726,13 @@ void FullAlgorithm(double ***y, double ***x, double *alpha,
 
             sumnum = 0;
             sumden = 0;
-            for(i=0; i<*P; i++)
+            for(m=0; m<*M; m++)
             {
-                sumden += (*(deltaold+i)) * (*(deltaold+i));
+                sumden += (*(deltaold+m)) * (*(deltaold+m));
             }
-            for(i=0; i<*P; i++)
+            for(m=0; m<*M; m++)
             {
-                sumnum += ((*(delta+i) - *(deltaold+i))*(*(delta+i) - *(deltaold+i)))/sumden;
+                sumnum += ((*(delta+m) - *(deltaold+m))*(*(delta+m) - *(deltaold+m)))/sumden;
             }
             deltadiff = sqrt(sumnum);                                       /* delta.diff */
 
@@ -719,26 +742,26 @@ void FullAlgorithm(double ***y, double ***x, double *alpha,
             if(gammadiff>overalldiff) {overalldiff = gammadiff;}
             if(deltadiff>overalldiff) {overalldiff = deltadiff;}
 
+            if(*verboseInd == 1) {Rprintf("Max difference = %f, ", overalldiff);}
             /* Set new values = to old values of hyperparameters */
             for(j=0; j<*K; j++)
             {
                 *(alphaold+j) = *(alpha+j);
                 *(gammaold+j) = *(gamma+j);
             }
-            for(i=0; i<*P; i++)
+            for(m=0; m<*M; m++)
             {
-                *(betaold+i) = *(beta+i);
-                *(deltaold+i) = *(delta+i);
+                *(betaold+m) = *(beta+m);
+                *(deltaold+m) = *(delta+m);
             }
 
             /* Update the number of iterations, and loop */
-           Rprintf("* %d ", iter);
+           if(*verboseInd == 1) {Rprintf("** Iteration %d complete! ** \n", iter);}
            *alliterations = iter;
             iter++;
         }
+    }
 
-  /*      Rprintf("Estimation complete \n"); */
-  }
     /* Free memory */
     for(r=0; r<*R; r++)
     {
@@ -751,7 +774,10 @@ void FullAlgorithm(double ***y, double ***x, double *alpha,
         {
             free(*(*(C+r)+i));
             free(*(*(D+r)+i));
-            free(*(*(Dvar+r)+i));
+        }
+        for(m=0; m<*M; m++)
+        {
+            free(*(*(Dvar+r)+m));
         }
         free(*(A+r));
         free(*(B+r));
@@ -778,32 +804,28 @@ void FullAlgorithm(double ***y, double ***x, double *alpha,
 }
 
 
-
 /******************************************************************/
 /*  This is the counterpart of Kalman_Filter.R.  It takes as      */
 /*  inputs y, the current values of A, B, C, D, v, mu, and sigma  */
 /*  (where sigma is a matrix), K, P, T, and R.  It returns the    */
 /*  new values of x into the original triple pointer x.           */
 /******************************************************************/
-
-
 void Kalman(double ***y, double ***A, double ***B,
     double ***C, double ***D, double *v, double *mu, double *sigma,
-    int *K, int *P, int *T, int *R, double ***x)
+    int *K, int *P, int *T, int *R, int *M, double ***x, double ***u)
 {
-    int r, t, i, j, ii, jj, index;
+    int r, t, i, j, jj, index, m;
     double **yr, **Ar, **Br, **Cr, **Dr, **sigmamat, **xminus,
-        **filter, **Pminus, **Pk, **smoother, **Ps;
+        **filter, **Pminus, **Pk, **smoother, **Ps, **ur;
 
     /* Load subprograms */
-    void KalmanFilter(double**, double**, double**, double**,
-        double**, double*, double*, double**, int*, int*, int*,
-        double**, double**, double**, double**);
-
+    void KalmanFilter(double**, double**, double**, double**, double**, double**, double*, double*,
+        double**, int*, int*, int*, int*, double**, double**, double**, double**);
     void KalmanSmoother(double**, double**, double**, double**,
         double**, int*, int*, double**, double**);
 
     /* Allocate memory */
+    ur = (double**) calloc(*M, sizeof(double*));
     yr = (double**) calloc(*P, sizeof(double*));
     Ar = (double**) calloc(*K, sizeof(double*));
     Br = (double**) calloc(*K, sizeof(double*));
@@ -819,7 +841,7 @@ void Kalman(double ***y, double ***A, double ***B,
     for(j=0; j<*K; j++)
     {
         *(Ar+j) = (double*) calloc(*K, sizeof(double));
-        *(Br+j) = (double*) calloc(*P, sizeof(double));
+        *(Br+j) = (double*) calloc(*M, sizeof(double));
         *(sigmamat+j) = (double*) calloc(*K, sizeof(double));
         *(xminus+j) = (double*) calloc(*T, sizeof(double));
         *(filter+j) = (double*) calloc(*T, sizeof(double));
@@ -832,7 +854,11 @@ void Kalman(double ***y, double ***A, double ***B,
     {
         *(yr+i) = (double*) calloc(*T, sizeof(double));
         *(Cr+i) = (double*) calloc(*K, sizeof(double));
-        *(Dr+i) = (double*) calloc(*P, sizeof(double));
+        *(Dr+i) = (double*) calloc(*M, sizeof(double));
+    }
+    for(m=0; m<*M; m++)
+    {
+        *(ur+m) = (double*) calloc(*T, sizeof(double));
     }
 
     /* Change sigma into matrix form */
@@ -848,7 +874,6 @@ void Kalman(double ***y, double ***A, double ***B,
 
     /* Do Kalman filter for each replicate r independently */
     /* Set xminus, filter, Pminus, Pk, smoother, and PS equal to zero at start */
-
     for(r=0; r<*R; r++)
     {
         /* Read in correct values for y, A, B, C, and D */
@@ -862,9 +887,9 @@ void Kalman(double ***y, double ***A, double ***B,
             {
                 *(*(Cr+i)+j) = *(*(*(C+r)+i)+j);
             }
-            for(ii=0; ii<*P; ii++)
+            for(m=0; m<*M; m++)
             {
-                *(*(Dr+i)+ii) = *(*(*(D+r)+i)+ii);
+                *(*(Dr+i)+m) = *(*(*(D+r)+i)+m);
             }
         }
         for(j=0; j<*K; j++)
@@ -873,26 +898,30 @@ void Kalman(double ***y, double ***A, double ***B,
             {
                 *(*(Ar+j)+jj) = *(*(*(A+r)+j)+jj);
             }
-            for(i=0; i<*P; i++)
+            for(m=0; m<*M; m++)
             {
-                *(*(Br+j)+i) = *(*(*(B+r)+j)+i);
+                *(*(Br+j)+m) = *(*(*(B+r)+j)+m);
             }
         }
-
-        KalmanFilter(yr, Ar, Br, Cr, Dr, v, mu, sigmamat, K, P,                 /* Kalman filter */
-            T, xminus, filter, Pminus, Pk);
-        KalmanSmoother(Ar, xminus, filter, Pminus, Pk, K, T,                    /* Kalman smoother */
-            smoother, Ps);
-
+        for(m=0; m<*M; m++)
+        {
+            for(t=0; t<*T; t++)
+            {
+                *(*(ur+m)+t) = *(*(*(u+r)+m)+t);
+            }
+        }
+        KalmanFilter(yr, ur, Ar, Br, Cr, Dr, v, mu, sigmamat, K, P,
+            T, M, xminus, filter, Pminus, Pk);                                      /* Kalman filter */
+        KalmanSmoother(Ar, xminus, filter, Pminus, Pk, K, T,
+            smoother, Ps);                                                         /* Kalman smoother */
         for(j=0; j<*K; j++)
         {
             for(t=0; t<*T; t++)
             {
                 *(*(*(x+r)+j)+t) = *(*(smoother+j)+t);                         /* Set x's to smoothed value */
-            }
+           }
         }
     }
-
      /* Release memory */
     for(j=0; j<*K; j++)
     {
@@ -912,6 +941,11 @@ void Kalman(double ***y, double ***A, double ***B,
         free(*(Cr+i));
         free(*(Dr+i));
     }
+    for(m=0; m<*M; m++)
+    {
+        free(*(ur+m));
+    }
+    free(ur);
     free(yr);
     free(Ar);
     free(Br);
@@ -924,17 +958,16 @@ void Kalman(double ***y, double ***A, double ***B,
     free(Pk);
     free(smoother);
     free(Ps);
-
 }
 
 /* Kalman Filter function */
-void KalmanFilter(double **yr, double **Ar, double **Br, double **Cr,
+void KalmanFilter(double **yr, double **ur, double **Ar, double **Br, double **Cr,
     double **Dr, double *v, double *mu, double **sigmamat, int *K, int *P,
-    int *T, double **xminus, double **filter, double **Pminus, double **Pk)
+    int *T, int *M, double **xminus, double **filter, double **Pminus, double **Pk)
 {
-    int t, j, jj, i;
+    int t, j, jj, i, m;
     double **gain, **matp1, **matk1, **matk1b, **matp1b, **matkk,
-        **xtemp, **ytemp, **xtemp2, **ytemp2, **Art, **matkk2;
+        **xtemp, **ytemp, **xtemp2, **ytemp2, **Art, **matkk2, **utemp, **utemp2;
 
     /* Load subprograms */
     void KalmanGain(double**, double**, double*, int*, int*, double**);
@@ -952,6 +985,8 @@ void KalmanFilter(double **yr, double **Ar, double **Br, double **Cr,
     ytemp2 = (double**) calloc(*P, sizeof(double*));
     Art = (double**) calloc(*K, sizeof(double*));
     matkk2 = (double**) calloc(*K, sizeof(double*));
+    utemp = (double**) calloc(*M, sizeof(double*));
+    utemp2 = (double**) calloc(*M, sizeof(double*));
     for(j=0; j<*K; j++)
     {
         *(gain+j) = (double*) calloc(*P, sizeof(double));
@@ -970,71 +1005,38 @@ void KalmanFilter(double **yr, double **Ar, double **Br, double **Cr,
         *(ytemp+i) = (double*) calloc(1, sizeof(double));
         *(ytemp2+i) = (double*) calloc(1, sizeof(double));
     }
+    for(m=0; m<*M; m++)
+    {
+        *(utemp+m) = (double*) calloc(1, sizeof(double));
+        *(utemp2+m) = (double*) calloc(1, sizeof(double));
+    }
 
     /* Begin Kalman filter */
-
     for(t=0; t<*T; t++)
     {
-        if(t==0)                                                        /* First time point */
+        if(t==0)                                                            /* First time point */
         {
             for(j=0; j<*K; j++)
             {
-                *(*(xminus+j)) = *(mu+j);                               /* x.minus */
+                *(*(xminus+j)) = *(mu+j);                                   /* x.minus */
                 for(jj=0; jj<*K; jj++)
                 {
-                    *(*(Pminus+j)+jj) = *(*(sigmamat+j)+jj);               /* P.minus */
+                    *(*(Pminus+j)+jj) = *(*(sigmamat+j)+jj);                /* P.minus */
                 }
             }
-
-            /* Set gain = 0 */
-            for(j=0; j<*K; j++)
-            {
-                for(i=0; i<*P; i++)
-                {
-                    *(*(gain+j)+i) = 0;
-                }
-            }
-            KalmanGain(Pminus, Cr, v, K, P, gain);                         /* Kalman Gain */
-            MatrixMult(Cr, *P, *K, xminus, 1, matp1);
-            for(i=0; i<*P; i++)
-            {
-                *(*(matp1+i)) = *(*(yr+i)) - *(*(matp1+i));
-            }
-            MatrixMult(gain, *K, *P, matp1, 1, matk1);
-            for(j=0; j<*K; j++)
-            {
-                *(*(filter+j)) = *(*(xminus+j)) + *(*(matk1+j));        /* Filter (x.k) */
-            }
-            MatrixMult(gain, *K, *P, Cr, *K, matkk);
-            for(j=0; j<*K; j++)
-            {
-                for(jj=0; jj<*K; jj++)
-                {
-                    if(j != jj)
-                    {
-                        *(*(matkk2+j)+jj) = 0-(*(*(matkk+j)+jj));
-                    }
-                    if(j == jj)
-                    {
-                        *(*(matkk2+j)+jj) = 1-(*(*(matkk+j)+jj));
-                    }
-                }
-            }
-            MatrixMult(matkk2, *K, *K, Pminus, *K, Pk);                  /* Pk */
         }
-
-        if(t > 0)                                                       /* All other time points */
-        {
+        if(t > 0)                                                           /* All other time points */
+       {
             for(j=0; j<*K; j++)
             {
                 *(*(xtemp+j)) = *(*(filter+j)+(t-1));
             }
-            for(i=0; i<*P; i++)
+            for(m=0; m<*M; m++)
             {
-                *(*(ytemp+i)) = *(*(yr+i)+(t-1));
+                *(*(utemp+m)) = *(*(ur+m)+t);
             }
             MatrixMult(Ar, *K, *K, xtemp, 1, matk1);
-            MatrixMult(Br, *K, *P, ytemp, 1, matk1b);
+            MatrixMult(Br, *K, *M, utemp, 1, matk1b);
             for(j=0; j<*K; j++)
             {
                 *(*(xminus+j)+t) = *(*(matk1+j)) + *(*(matk1b+j));      /* x.minus */
@@ -1045,58 +1047,62 @@ void KalmanFilter(double **yr, double **Ar, double **Br, double **Cr,
             for(j=0; j<*K; j++)
             {
                 *(*(Pminus+j)+j) += 1;                                  /* P.minus */
-            }
-
-            /* Set gain = 0 */
-            for(j=0; j<*K; j++)
-            {
-                for(i=0; i<*P; i++)
-                {
-                    *(*(gain+j)+i) = 0;
-                }
-            }
-            KalmanGain(Pminus, Cr, v, K, P, gain);                         /* Kalman gain */
-
-            for(j=0; j<*K; j++)
-            {
-                *(*(xtemp2+j)) = *(*(xminus+j)+t);
-            }
-            for(i=0; i<*P; i++)
-            {
-                *(*(ytemp2+i)) = *(*(yr+i)+t);
-            }
-            MatrixMult(Cr, *P, *K, xtemp2, 1, matp1);
-            MatrixMult(Dr, *P, *P, ytemp, 1, matp1b);
-            for(i=0; i<*P; i++)
-            {
-                *(*(ytemp+i)) = *(*(ytemp2+i)) - *(*(matp1+i)) - *(*(matp1b+i));
-            }
-            MatrixMult(gain, *K, *P, ytemp, 1, matk1);
-            for(j=0; j<*K; j++)
-            {
-                *(*(filter+j)+t) = *(*(xminus+j)+t) + *(*(matk1+j));    /* Filter (x.k) */
-            }
-            MatrixMult(gain, *K, *P, Cr, *K, matkk);
-            for(j=0; j<*K; j++)
-            {
-                for(jj=0; jj<*K; jj++)
-                {
-                    if(j != jj)
-                    {
-                        *(*(matkk2+j)+jj) = 0-(*(*(matkk+j)+jj));
-                    }
-                    if(j == jj)
-                    {
-                        *(*(matkk2+j)+jj) = 1-(*(*(matkk+j)+jj));
-                    }
-                }
-            }
-            MatrixMult(matkk2, *K, *K, Pminus, *K, Pk);                  /* Pk */
+           }
         }
+        /* Set y */
+        for(i=0; i<*P; i++)
+        {
+            *(*(ytemp+i)) = *(*(yr+i)+t);
+            *(*(ytemp2+i)) = 0;
+        }
+
+        /* Set gain = 0 to set up for KalmanGain */
+        for(j=0; j<*K; j++)
+        {
+            for(i=0; i<*P; i++)
+            {
+                *(*(gain+j)+i) = 0;
+            }
+        }
+        KalmanGain(Pminus, Cr, v, K, P, gain);                         /* Kalman Gain */
+        for(j=0; j<*K; j++)
+        {
+            *(*(xtemp2+j)) = *(*(xminus+j)+t);
+        }
+        for(m=0; m<*M; m++)
+        {
+            *(*(utemp2+m)) = *(*(ur+m)+t);
+        }
+        MatrixMult(Cr, *P, *K, xtemp2, 1, matp1);
+        MatrixMult(Dr, *P, *M, utemp2, 1, matp1b);
+        for(i=0; i<*P; i++)
+        {
+            *(*(ytemp2+i)) = *(*(ytemp+i)) - *(*(matp1+i)) - *(*(matp1b+i));
+        }
+        MatrixMult(gain, *K, *P, ytemp2, 1, matk1);
+        for(j=0; j<*K; j++)
+        {
+            *(*(filter+j)+t) = *(*(xminus+j)+t) + *(*(matk1+j));        /* Filter (x.k) */
+        }
+        MatrixMult(gain, *K, *P, Cr, *K, matkk);
+        for(j=0; j<*K; j++)
+        {
+            for(jj=0; jj<*K; jj++)
+            {
+                if(j != jj)
+                {
+                    *(*(matkk2+j)+jj) = 0-(*(*(matkk+j)+jj));
+                }
+                if(j == jj)
+                {
+                    *(*(matkk2+j)+jj) = 1-(*(*(matkk+j)+jj));
+                }
+            }
+        }
+        MatrixMult(matkk2, *K, *K, Pminus, *K, Pk);                  /* Pk */
     }
 
     /* Release memory */
-
     for(j=0; j<*K; j++)
     {
         free(*(gain+j));
@@ -1115,6 +1121,13 @@ void KalmanFilter(double **yr, double **Ar, double **Br, double **Cr,
         free(*(ytemp+i));
         free(*(ytemp2+i));
     }
+    for(m=0; m<*M; m++)
+    {
+        free(*(utemp+m));
+        free(*(utemp2+m));
+    }
+    free(utemp);
+    free(utemp2);
     free(Art);
     free(xtemp);
     free(xtemp2);
@@ -1127,9 +1140,7 @@ void KalmanFilter(double **yr, double **Ar, double **Br, double **Cr,
     free(matp1b);
     free(gain);
     free(matkk2);
-
 }
-
 
 /* Kalman Gain calculator */
 void KalmanGain(double **Pminus, double **Cr, double *v, int *K, int *P, double **gain)
@@ -1275,9 +1286,7 @@ void KalmanSmoother(double **Ar, double **xminus, double **filter,
     free(matk1);
     free(Art);
     free(matkk);
-
 }
-
 
 /* Kalman Smooth calculator */
 void KalmanSmooth(double **Pminus, double **Pk, double **Ar, int *K, double **smooth)
@@ -1303,7 +1312,7 @@ void KalmanSmooth(double **Pminus, double **Pk, double **Ar, int *K, double **sm
     MatrixMult(matkk, *K, *K, inv, *K, smooth);
 
     /* Release memory */
-    for(j=0; j<*K; j++)
+   for(j=0; j<*K; j++)
     {
         free(*(matkk+j));
         free(*(Art+j));
@@ -1316,24 +1325,29 @@ void KalmanSmooth(double **Pminus, double **Pk, double **Ar, int *K, double **sm
 }
 
 
-
+/******************************************************************/
+/* EmTypeConv runs the EM-type alogrithm.  Inputs are alpha - v = */
+/* hyperparameters, x = hidden states, y = gene expression, u =   */
+/* inputs, K = dimension of hidden state, P = # of genes, T = time*/
+/* pts, R = # of replicates, M = input dimension, conv1 - conv2 = */
+/* convergence criteria, subiterations = maximum allowed          */
+/* iterations for EM-type loop.                                   */
+/* ****************************************************************/
 void EmTypeConv(double *alpha, double *beta, double *gamma,
-    double *delta, double *v, double ***x, double ***y,
-    int *K, int *P, int *T, int *R, double *conv1, double *conv2,
+    double *delta, double *v, double ***x, double ***y, double ***u,
+    int *K, int *P, int *T, int *R, int *M, double *conv1, double *conv2,
     int *subiterations)
 {
     double ***A, ***B, ***C, ***D, ***Dvar;
-    int r, i, j, *KK;
+    int r, i, j, *KK, m;
 
     /* Load subprograms */
-    void HyperMax(double*, double*, double*, double*,
-        double*, double***, double***, int*, int*, int*,
-        int*, double*, int*);
-    void PostMeanR(double*, double*, double*, double*, double*,
-        double***, double***, int*, int*, int*,	int*, double***,
-        double***, double***, double***, double***);
-    void VarMaxR(double***, double***, double***, double***, int*,
-        int*, int*, int*, double*);
+    void HyperMax(double*, double*, double*, double*, double*, double***, double***, double***, int*,
+        int*, int*, int*, int*, double*, int*);
+    void PostMeanR(double*, double*, double*, double*, double*, double***, double***, double***, int*,
+        int*, int*, int*, int*, double***, double***, double***, double***, double***);
+    void VarMaxR(double***, double***, double***, double***, double***, int*, int*, int*, int*, int*,
+        double*);
 
     /* Allocate space for vnew, A, B, C, D, and Dvar */
     KK = (int*) calloc(1, sizeof(int));
@@ -1352,38 +1366,37 @@ void EmTypeConv(double *alpha, double *beta, double *gamma,
         *(B+r) = (double**) calloc(*KK, sizeof(double*));
         *(C+r) = (double**) calloc(*P, sizeof(double*));
         *(D+r) = (double**) calloc(*P, sizeof(double*));
-        *(Dvar+r) = (double**) calloc(*P, sizeof(double*));
+        *(Dvar+r) = (double**) calloc(*M, sizeof(double*));
         for(j=0; j<*KK; j++)
         {
             *(*(A+r)+j) = (double*) calloc(*KK, sizeof(double));
-            *(*(B+r)+j) = (double*) calloc(*P, sizeof(double));
+            *(*(B+r)+j) = (double*) calloc(*M, sizeof(double));
         }
         for(i=0; i<*P; i++)
         {
             *(*(C+r)+i) = (double*) calloc(*KK, sizeof(double));
-            *(*(D+r)+i) = (double*) calloc(*P, sizeof(double));
-            *(*(Dvar+r)+i) = (double*) calloc(*P, sizeof(double));
+            *(*(D+r)+i) = (double*) calloc(*M, sizeof(double));
+        }
+        for(m=0; m<*M; m++)
+        {
+            *(*(Dvar+r)+m) = (double*) calloc(*M, sizeof(double));
         }
     }
 
     /* Initial estimation of hyperparameter estimates
        New estimates are put back into alpha, beta, gamma, delta
        Use convergence criterion conv1 */
-    HyperMax(alpha, beta, gamma, delta, v, x, y, K, P, T, R, conv1, subiterations);
-    /*Rprintf("\n");*/
+    HyperMax(alpha, beta, gamma, delta, v, x, y, u, K, P, T, R, M, conv1, subiterations);
     /* Estimation of gene precisions, v
        New estimate of v is put back into v */
-    PostMeanR(alpha, beta, gamma, delta, v, x, y, K, P, T, R, A, B, C,
+    PostMeanR(alpha, beta, gamma, delta, v, x, y, u, K, P, T, R, M, A, B, C,
         D, Dvar);
-    VarMaxR(x, y, C, D, P, R, T, K, v);
-    /* Rprintf("V estimation \n"); */
+    VarMaxR(x, y, u, C, D, P, R, T, K, M, v);
 
     /* Final estimation of hyperparameter estimates
        New esimates are put back into alpha, beta, gamma, delta
        Use convergence criterion conv2 */
-    HyperMax(alpha, beta, gamma, delta, v, x, y, K, P, T, R, conv2, subiterations);
-    /*Rprintf("\n");*/
- /*  Rprintf("%f %f %f \n", *(alpha), *(alpha+1), *(alpha+2)); */
+    HyperMax(alpha, beta, gamma, delta, v, x, y, u, K, P, T, R, M, conv2, subiterations);
 
     /* Release memory */
     for(r=0; r<*R; r++)
@@ -1397,7 +1410,10 @@ void EmTypeConv(double *alpha, double *beta, double *gamma,
         {
             free(*(*(C+r)+i));
             free(*(*(D+r)+i));
-            free(*(*(Dvar+r)+i));
+        }
+        for(m=0; m<*M; m++)
+        {
+            free(*(*(Dvar+r)+m));
         }
         free(*(A+r));
         free(*(B+r));
@@ -1413,25 +1429,21 @@ void EmTypeConv(double *alpha, double *beta, double *gamma,
     free(KK);
 }
 
-
-
 /******************************************************************/
 /*  Function to conduct EM algorithm to estimate alpha - delta.   */
 /*  Corresponds to the hyper.max function in R.  Inputs are       */
 /*  initial values of alpha - delta, current value of v and x,    */
-/*  y, K, P, T, R, and a convergence criterion.  Updated values   */
-/*  of alpha - delta are returned in the original pointers.       */
+/*  y, u, K, P, T, R, M, and a convergence criterion. Updated     */
+/*  values of alpha - delta are returned in the original pointers.*/
 /******************************************************************/
-
-
 void HyperMax(double *alpha, double *beta, double *gamma, double *delta,
-    double *v, double ***x, double ***y, int *K, int *P, int *T,
-    int *R, double *conv, int *subiterations)
+    double *v, double ***x, double ***y, double ***u, int *K, int *P, int *T,
+    int *R, int *M, double *conv, int *subiterations)
 {
-    int r, j, i, ii, jj, t, iter, *all, *Rchoice, *KK;
+    int r, j, i, jj, t, iter, *all, *Rchoice, *KK, m, mm;
     double convergence, K2, P2;
     double **MNLNinv, **LNMNinv, **JGFGinv, **FGJGinv,
-        ***HNLS, ***SNMH, ***EGFQ, ***QGJE, **matk1, **matp1,
+        ***HNLS, ***SNMH, ***EGFQ, ***QGJE, **matk1, **matm1, **matp1,
         *tempa, *tempb, *tempc, *tempd,
         **alphanewmat, **betanewmat, **gammanewmat, **deltanewmat,
         *alphanew, *betanew, *gammanew, *deltanew,
@@ -1440,12 +1452,11 @@ void HyperMax(double *alpha, double *beta, double *gamma, double *delta,
 
     /* Load subprograms */
     double VecMedian(double*, int*);
-    void PostMeanR(double*, double*, double*, double*, double*, double***,
-        double***, int*, int*, int*, int*, double***, double***, double***,
-        double***, double***);
-    void SimplifyX(double*, double*, double*, double*, double*, double***,
-        double***, int*, int*, int*, int*, int*,double**, double**, double**,
-        double**, double***, double***, double***, double ***);
+    void PostMeanR(double*, double*, double*, double*, double*, double***, double***, double***, int*,
+        int*, int*, int*, int*, double***, double***, double***, double***, double***);
+    void SimplifyX(double*, double*, double*, double*, double*, double***, double***, double***, int*,
+        int*, int*, int*, int*, int*, double**, double**, double**, double**, double***,
+        double***, double***, double***);
 
     all = (int*) calloc(1, sizeof(int));
     Rchoice = (int*) calloc(1, sizeof(int));
@@ -1462,68 +1473,71 @@ void HyperMax(double *alpha, double *beta, double *gamma, double *delta,
 
     /* Allocate MNLNinv, LNMNinv, JGFGinv, FGJGinv, HNLS, SNMH, EGFQ, and QGJE and set to 0 */
     MNLNinv = (double**) calloc(*KK, sizeof(double*));
-    LNMNinv = (double**) calloc(*P, sizeof(double*));
+    LNMNinv = (double**) calloc(*M, sizeof(double*));
     JGFGinv = (double**) calloc(*KK, sizeof(double*));
-    FGJGinv = (double**) calloc(*P, sizeof(double*));
+    FGJGinv = (double**) calloc(*M, sizeof(double*));
     HNLS = (double***) calloc(*KK, sizeof(double**));
     SNMH = (double***) calloc(*KK, sizeof(double**));
     EGFQ = (double***) calloc(*P, sizeof(double**));
     QGJE = (double***) calloc(*P, sizeof(double**));
 
     matk1 = (double**) calloc(*KK, sizeof(double*));
+    matm1 = (double**) calloc(*M, sizeof(double*));
     matp1 = (double**) calloc(*P, sizeof(double*));
     tempa = (double*) calloc(*KK, sizeof(double));
-    tempb = (double*) calloc(*P, sizeof(double));
+    tempb = (double*) calloc(*M, sizeof(double));
     tempc = (double*) calloc(*KK, sizeof(double));
-    tempd = (double*) calloc(*P, sizeof(double));
+    tempd = (double*) calloc(*M, sizeof(double));
 
     alphanewmat = (double**) calloc(*KK, sizeof(double*));
-    betanewmat = (double**) calloc(*P, sizeof(double*));
+    betanewmat = (double**) calloc(*M, sizeof(double*));
     gammanewmat = (double**) calloc(*KK, sizeof(double*));
-    deltanewmat = (double**) calloc(*P, sizeof(double*));
+    deltanewmat = (double**) calloc(*M, sizeof(double*));
     alphanew = (double*) calloc(*KK, sizeof(double));
-    betanew = (double*) calloc(*P, sizeof(double));
+    betanew = (double*) calloc(*M, sizeof(double));
     gammanew = (double*) calloc(*KK, sizeof(double));
-    deltanew = (double*) calloc(*P, sizeof(double));
+    deltanew = (double*) calloc(*M, sizeof(double));
 
     for(j=0; j<*KK; j++)
     {
         *(MNLNinv+j) = (double*) calloc(*KK, sizeof(double));
         *(JGFGinv+j) = (double*) calloc(*KK, sizeof(double));
         *(HNLS+j) = (double**) calloc(*KK, sizeof(double*));
-        *(SNMH+j) = (double**) calloc(*P, sizeof(double*));
+        *(SNMH+j) = (double**) calloc(*M, sizeof(double*));
         for(jj=0; jj<*KK; jj++)
         {
             *(*(HNLS+j)+jj) = (double*) calloc(1, sizeof(double));
         }
-        for(i=0; i<*P; i++)
+        for(m=0; m<*M; m++)
         {
-            *(*(SNMH+j)+i) = (double*) calloc(1, sizeof(double));
+            *(*(SNMH+j)+m) = (double*) calloc(1, sizeof(double));
         }
         *(matk1+j) = (double*) calloc(1, sizeof(double));
         *(alphanewmat+j) = (double*) calloc(*R, sizeof(double));
         *(gammanewmat+j) = (double*) calloc(*R, sizeof(double));
     }
+    for(m=0; m<*M; m++)
+    {
+        *(LNMNinv+m) = (double*) calloc(*M, sizeof(double));
+        *(FGJGinv+m) = (double*) calloc(*M, sizeof(double));
+        *(betanewmat+m) = (double*) calloc(*R, sizeof(double));
+        *(deltanewmat+m) = (double*) calloc(*R, sizeof(double));
+        *(matm1+m) = (double*) calloc(1, sizeof(double));
+    }
     for(i=0; i<*P; i++)
     {
-        *(LNMNinv+i) = (double*) calloc(*P, sizeof(double));
-        *(FGJGinv+i) = (double*) calloc(*P, sizeof(double));
         *(EGFQ+i) = (double**) calloc(*KK, sizeof(double*));
+        *(QGJE+i) = (double**) calloc(*M, sizeof(double*));
         for(j=0; j<*KK; j++)
         {
             *(*(EGFQ+i)+j) = (double*) calloc(1, sizeof(double));
         }
-        *(QGJE+i) = (double**) calloc(*P, sizeof(double*));
-        for(ii=0; ii<*P; ii++)
+        for(m=0; m<*M; m++)
         {
-            *(*(QGJE+i)+ii) = (double*) calloc(1, sizeof(double));
+            *(*(QGJE+i)+m) = (double*) calloc(1, sizeof(double));
         }
         *(matp1+i) = (double*) calloc(1, sizeof(double));
-        *(betanewmat+i) = (double*) calloc(*R, sizeof(double));
-        *(deltanewmat+i) = (double*) calloc(*R, sizeof(double));
     }
-
-    /* Rprintf("Hypermax loop! "); */
 
     /* If estimating x's */
     if(*K > 0)
@@ -1535,6 +1549,7 @@ void HyperMax(double *alpha, double *beta, double *gamma, double *delta,
             for(r=0; r<*R; r++)
             {
                 *Rchoice = r;
+
                 /* Set MNLNinv, LNMNinv, JGFGinv, FGJGinv, HNLS, SNMH, EGFQ, QGJE to 0 */
                 for(j=0; j<*K; j++)
                 {
@@ -1544,52 +1559,56 @@ void HyperMax(double *alpha, double *beta, double *gamma, double *delta,
                         *(*(JGFGinv+j)+jj)=0;
                         *(*(*(HNLS+j)+jj))=0;
                     }
-                    for(i=0; i<*P; i++)
+                    for(m=0; m<*M; m++)
                     {
-                        *(*(*(SNMH+j)+i))=0;
+                        *(*(*(SNMH+j)+m))=0;
                     }
                     *(*(matk1+j)) = 0;
                 }
+                for(m=0; m<*M; m++)
+                {
+                    for(mm=0; mm<*M; mm++)
+                    {
+                        *(*(LNMNinv+m)+mm)=0;
+                        *(*(FGJGinv+m)+mm)=0;
+                    }
+                }
                 for(i=0; i<*P; i++)
                 {
-                    for(ii=0; ii<*P; ii++)
+                    for(m=0; m<*M; m++)
                     {
-                        *(*(LNMNinv+i)+ii)=0;
-                        *(*(FGJGinv+i)+ii)=0;
-                        *(*(*(QGJE+i)+ii))=0;
+                        *(*(*(QGJE+i)+m))=0;
                     }
                     for(j=0; j<*K; j++)
                     {
                         *(*(*(EGFQ+i)+j))=0;
                     }
                 }
-
-                SimplifyX(alpha, beta, gamma, delta, v, x, y, K, P,             /* Simplify function */
-                    T, all, Rchoice, MNLNinv, LNMNinv, JGFGinv,
+                SimplifyX(alpha, beta, gamma, delta, v, x, y, u, K, P,             /* Simplify function */
+                    T, M, all, Rchoice, MNLNinv, LNMNinv, JGFGinv,
                     FGJGinv, HNLS, SNMH, EGFQ, QGJE);
-
                 for(j=0; j<*K; j++)
                 {
                     *(tempa+j) = 0;
                     *(tempc+j) = 0;
                 }
-                for(i=0; i<*P; i++)
+                for(m=0; m<*M; m++)
                 {
-                    *(tempb+i) = 0;
-                    *(tempd+i) = 0;
+                    *(tempb+m) = 0;
+                    *(tempd+m) = 0;
                 }
 
                 for(j=0; j<*K; j++)
                 {
-                      MatrixMult(MNLNinv, *K, *K, *(HNLS+j), 1, matk1);
+                    MatrixMult(MNLNinv, *K, *K, *(HNLS+j), 1, matk1);
                     for(jj=0; jj<*K; jj++)
                     {
                         *(tempa+jj) += (*(*(matk1+jj))) * (*(*(matk1+jj)));     /* temp.a */
                     }
-                    MatrixMult(LNMNinv, *P, *P, *(SNMH+j), 1, matp1);
-                    for(i=0; i<*P; i++)
+                    MatrixMult(LNMNinv, *M, *M, *(SNMH+j), 1, matm1);
+                    for(m=0; m<*M; m++)
                     {
-                        *(tempb+i) += (*(*(matp1+i))) * (*(*(matp1+i)));        /* temp.b */
+                        *(tempb+m) += (*(*(matm1+m))) * (*(*(matm1+m)));        /* temp.b */
                     }
                 }
 
@@ -1601,11 +1620,11 @@ void HyperMax(double *alpha, double *beta, double *gamma, double *delta,
                         *(*(matk1+j)) = (*(*(matk1+j))) * (*(*(matk1+j))) * (*(v+i));
                         *(tempc+j) += (*(*(matk1+j)));                          /* temp.c */
                     }
-                    MatrixMult(FGJGinv, *P, *P, *(QGJE+i), 1, matp1);
-                    for(ii=0; ii<*P; ii++)
+                    MatrixMult(FGJGinv, *M, *M, *(QGJE+i), 1, matm1);
+                    for(m=0; m<*M; m++)
                     {
-                        *(*(matp1+ii)) = (*(*(matp1+ii))) * (*(*(matp1+ii))) * (*(v+i));
-                        *(tempd+ii) += (*(*(matp1+ii)));                        /* temp.d */
+                        *(*(matm1+m)) = (*(*(matm1+m))) * (*(*(matm1+m))) * (*(v+i));
+                        *(tempd+m) += (*(*(matm1+m)));                         /* temp.d */
                     }
                 }
 
@@ -1614,29 +1633,25 @@ void HyperMax(double *alpha, double *beta, double *gamma, double *delta,
                     *(*(alphanewmat+j)+r) = K2 * (1.0/(K2 * (*(*(MNLNinv+j)+j)) + (1.0/2.0)*(*(tempa+j))));
                     *(*(gammanewmat+j)+r) = P2 * (1.0/(P2 * (*(*(JGFGinv+j)+j)) + (1.0/2.0)*(*(tempc+j))));
                 }
-                for(i=0; i<*P; i++)
+                for(m=0; m<*M; m++)
                 {
-                    *(*(betanewmat+i)+r) = K2 * (1/(K2 * (*(*(LNMNinv+i)+i)) + (1.0/2.0)*(*(tempb+i))));
-                    *(*(deltanewmat+i)+r) = P2 * (1/(P2 * (*(*(FGJGinv+i)+i)) + (1.0/2.0)*(*(tempd+i))));
+                    *(*(betanewmat+m)+r) = K2 * (1/(K2 * (*(*(LNMNinv+m)+m)) + (1.0/2.0)*(*(tempb+m))));
+                    *(*(deltanewmat+m)+r) = P2 * (1/(P2 * (*(*(FGJGinv+m)+m)) + (1.0/2.0)*(*(tempd+m))));
                 }
-
-                /* Rprintf("R%d ", r); */
             }
-            /*Rprintf("\n");*/
 
             for(j=0; j<*K; j++)
             {
                 *(alphanew+j) = VecMedian(*(alphanewmat+j), R);             /* alpha.new */
                 *(gammanew+j) = VecMedian(*(gammanewmat+j), R);             /* beta.new */
             }
-            for(i=0; i<*P; i++)
+            for(m=0; m<*M; m++)
             {
-                *(betanew+i) = VecMedian(*(betanewmat+i),R);                /* gamma.new */
-                *(deltanew+i) = VecMedian(*(deltanewmat+i),R);              /* delta.new */
+                *(betanew+m) = VecMedian(*(betanewmat+m),R);                /* gamma.new */
+                *(deltanew+m) = VecMedian(*(deltanewmat+m),R);              /* delta.new */
             }
 
             /* Check convergence */
-
             sumnum = 0;
             sumden = 0;
             for(j=0; j<*K; j++)
@@ -1651,13 +1666,13 @@ void HyperMax(double *alpha, double *beta, double *gamma, double *delta,
 
             sumnum = 0;
             sumden = 0;
-            for(i=0; i<*P; i++)
+            for(m=0; m<*M; m++)
             {
-                sumden += (*(beta+i)) * (*(beta+i));
+                sumden += (*(beta+m)) * (*(beta+m));
             }
-            for(i=0; i<*P; i++)
+            for(m=0; m<*M; m++)
             {
-                sumnum += ((*(beta+i) - *(betanew+i))*(*(beta+i) - *(betanew+i)))/sumden;
+                sumnum += ((*(beta+m) - *(betanew+m))*(*(beta+m) - *(betanew+m)))/sumden;
             }
             betadiff = sqrt(sumnum);                                       /* beta.diff */
 
@@ -1675,13 +1690,13 @@ void HyperMax(double *alpha, double *beta, double *gamma, double *delta,
 
             sumnum = 0;
             sumden = 0;
-            for(i=0; i<*P; i++)
+            for(m=0; m<*M; m++)
             {
-                sumden += (*(delta+i)) * (*(delta+i));
+                sumden += (*(delta+m)) * (*(delta+m));
             }
-            for(i=0; i<*P; i++)
+            for(m=0; m<*M; m++)
             {
-                sumnum += ((*(delta+i) - *(deltanew+i))*(*(delta+i) - *(deltanew+i)))/sumden;
+                sumnum += ((*(delta+m) - *(deltanew+m))*(*(delta+m) - *(deltanew+m)))/sumden;
             }
             deltadiff = sqrt(sumnum);                                       /* delta.diff */
 
@@ -1691,37 +1706,30 @@ void HyperMax(double *alpha, double *beta, double *gamma, double *delta,
             if(gammadiff>convergence) {convergence = gammadiff;}
             if(deltadiff>convergence) {convergence = deltadiff;}
 
-            /* Rprintf("Check: "); */
-
             for(j=0; j<*K; j++)                                             /* Update hyperparameters */
             {
                 *(alpha+j) = *(alphanew+j);
                 *(gamma+j) = *(gammanew+j);
             }
-            for(i=0; i<*P; i++)
+            for(m=0; m<*M; m++)
             {
-                *(beta+i) = *(betanew+i);
-                *(delta+i) = *(deltanew+i);
+                *(beta+m) = *(betanew+m);
+                *(delta+m) = *(deltanew+m);
             }
-            /*if(*K > 0)
-            {
-                Rprintf("%d ", iter);
-            }*/
             iter++;                                                            /* Update iteration number */
         }
-        /*Rprintf("\n");*/
     }
-    /* Free MNLNinv, LNMNinv, JGFGinv, FGJGinv, HNLS, SNMH, EGFQ, and QGJE */
 
+    /* Free MNLNinv, LNMNinv, JGFGinv, FGJGinv, HNLS, SNMH, EGFQ, and QGJE */
     for(j=0; j<*KK; j++)
     {
         for(jj=0; jj<*KK; jj++)
         {
             free(*(*(HNLS+j)+jj));
         }
-        for(i=0; i<*P; i++)
+        for(m=0; m<*M; m++)
         {
-            free(*(*(SNMH+j)+i));
+            free(*(*(SNMH+j)+m));
         }
         free(*(HNLS+j));
         free(*(SNMH+j));
@@ -1731,6 +1739,14 @@ void HyperMax(double *alpha, double *beta, double *gamma, double *delta,
         free(*(alphanewmat+j));
         free(*(gammanewmat+j));
     }
+    for(m=0; m<*M; m++)
+    {
+        free(*(LNMNinv+m));
+        free(*(FGJGinv+m));
+        free(*(matm1+m));
+        free(*(betanewmat+m));
+        free(*(deltanewmat+m));
+    }
 
     for(i=0; i<*P; i++)
     {
@@ -1738,17 +1754,13 @@ void HyperMax(double *alpha, double *beta, double *gamma, double *delta,
         {
             free(*(*(EGFQ+i)+j));
         }
-        for(ii=0; ii<*P; ii++)
+        for(m=0; m<*M; m++)
         {
-            free(*(*(QGJE+i)+ii));
+            free(*(*(QGJE+i)+m));
         }
         free(*(EGFQ+i));
         free(*(QGJE+i));
-        free(*(LNMNinv+i));
-        free(*(FGJGinv+i));
         free(*(matp1+i));
-        free(*(betanewmat+i));
-        free(*(deltanewmat+i));
     }
     free(HNLS);
     free(SNMH);
@@ -1758,7 +1770,7 @@ void HyperMax(double *alpha, double *beta, double *gamma, double *delta,
     free(QGJE);
     free(LNMNinv);
     free(FGJGinv);
-
+    free(matm1);
     free(matk1);
     free(matp1);
     free(tempa);
@@ -1774,23 +1786,22 @@ void HyperMax(double *alpha, double *beta, double *gamma, double *delta,
     free(gammanew);
     free(deltanew);
 
-
     /* If NOT estimating x's */
     A = (double***) calloc(*R, sizeof(double**));
     B = (double***) calloc(*R, sizeof(double**));
     C = (double***) calloc(*R, sizeof(double**));
     D = (double***) calloc(*R, sizeof(double**));
     Dvar = (double***) calloc(*R, sizeof(double**));
-    temp = (double*) calloc(*P, sizeof(double));
-    temp2 = (double*) calloc(*P, sizeof(double));
-    deltanewmat = (double**) calloc(*P, sizeof(double*));
-    deltanew = (double*) calloc(*P, sizeof(double));
-    matp1 = (double**) calloc(*P, sizeof(double*));
+    temp = (double*) calloc(*M, sizeof(double));
+    temp2 = (double*) calloc(*M, sizeof(double));
+    deltanewmat = (double**) calloc(*M, sizeof(double*));
+    deltanew = (double*) calloc(*M, sizeof(double));
+    matm1 = (double**) calloc(*M, sizeof(double*));
 
-    for(i=0; i<*P; i++)
+    for(m=0; m<*M; m++)
     {
-        *(deltanewmat+i) = (double*) calloc(*R, sizeof(double));
-        *(matp1+i) = (double*) calloc(1, sizeof(double));
+        *(deltanewmat+m) = (double*) calloc(*R, sizeof(double));
+        *(matm1+m) = (double*) calloc(1, sizeof(double));
     }
     for(r=0; r<*R; r++)
     {
@@ -1798,17 +1809,20 @@ void HyperMax(double *alpha, double *beta, double *gamma, double *delta,
         *(B+r) = (double**) calloc(*KK, sizeof(double*));
         *(C+r) = (double**) calloc(*P, sizeof(double*));
         *(D+r) = (double**) calloc(*P, sizeof(double*));
-        *(Dvar+r) = (double**) calloc(*P, sizeof(double*));
+        *(Dvar+r) = (double**) calloc(*M, sizeof(double*));
         for(j=0; j<*KK; j++)
         {
             *(*(A+r)+j) = (double*) calloc(*KK, sizeof(double));
-            *(*(B+r)+j) = (double*) calloc(*P, sizeof(double));
+            *(*(B+r)+j) = (double*) calloc(*M, sizeof(double));
         }
         for(i=0; i<*P; i++)
         {
             *(*(C+r)+i) = (double*) calloc(*KK, sizeof(double));
-            *(*(D+r)+i) = (double*) calloc(*P, sizeof(double));
-            *(*(Dvar+r)+i) = (double*) calloc(*P, sizeof(double));
+            *(*(D+r)+i) = (double*) calloc(*M, sizeof(double));
+        }
+        for(m=0; m<*M; m++)
+        {
+            *(*(Dvar+r)+m) = (double*) calloc(*M, sizeof(double));
         }
     }
 
@@ -1817,71 +1831,70 @@ void HyperMax(double *alpha, double *beta, double *gamma, double *delta,
         while(convergence > *conv)
         {
             if(iter > *subiterations) break;
-
-            PostMeanR(alpha, beta, gamma, delta, v, x, y, K, P, T, R,
+            PostMeanR(alpha, beta, gamma, delta, v, x, y, u, K, P, T, R, M,
                 A, B, C, D, Dvar);
             for(r=0; r<*R; r++)
             {
-                for(i=0; i<*P; i++)
+                for(m=0; m<*M; m++)
                 {
-                    *(temp+i) = 0;
+                    *(temp+m) = 0;
                 }
                 for(i=0; i<*P; i++)
                 {
-                    for(ii=0; ii<*P; ii++)
+                    for(m=0; m<*M; m++)
                     {
-                        *(temp2+ii) = 0;
+                        *(temp2+m) = 0;
                     }
-                    for(t=0; t<((*T)-1); t++)
+                    for(t=0; t<*T; t++)
                     {
-                        for(ii=0; ii<*P; ii++)
+                        for(m=0; m<*M; m++)
                         {
-                            *(temp2+ii) += (*(*(*(y+r)+ii)+t)) * (*(*(*(y+r)+i)+(t+1)));
+                            *(temp2+m) += (*(*(*(u+r)+m)+t)) * (*(*(*(y+r)+i)+t));
                         }
                     }
+
                     /* Set matp1 = temp2 */
-                    for(ii=0; ii<*P; ii++)
+                    for(m=0; m<*M; m++)
                     {
-                        *(*(matp1+ii)) = *(temp2+ii);
+                        *(*(matm1+m)) = *(temp2+m);
                     }
 
-                    MatrixMult(*(Dvar+r), *P, *P, matp1, 1, matp1);
-                    for(ii=0; ii<*P; ii++)
+                    MatrixMult(*(Dvar+r), *M, *M, matm1, 1, matm1);
+                    for(m=0; m<*M; m++)
                     {
-                        *(temp+ii) += (*(v+i)) * (*(*(matp1+ii))) * (*(*(matp1+ii)));
+                        *(temp+m) += (*(v+i)) * (*(*(matm1+m))) * (*(*(matm1+m)));
                     }
                 }
 
-                for(i=0; i<*P; i++)
+                for(m=0; m<*M; m++)
                 {
-                    *(*(deltanewmat+i)+r) = P2 * (1/(P2* (*(*(*(Dvar+r)+i)+i)) + (1.0/2.0) * (*(temp+i))));
+                    *(*(deltanewmat+m)+r) = P2 * (1/(P2* (*(*(*(Dvar+r)+m)+m)) + (1.0/2.0) * (*(temp+m))));
                 }
             }
-            for(i=0; i<*P; i++)
+            for(m=0; m<*M; m++)
             {
-                *(deltanew+i) = VecMedian(*(deltanewmat+i),R);                  /* delta.new */
+                *(deltanew+m) = VecMedian(*(deltanewmat+m),R);                  /* delta.new */
             }
 
             sumnum = 0;
             sumden = 0;
-            for(i=0; i<*P; i++)
+            for(m=0; m<*M; m++)
             {
-                sumden += (*(delta+i)) * (*(delta+i));
+                sumden += (*(delta+m)) * (*(delta+m));
             }
-            for(i=0; i<*P; i++)
+            for(m=0; m<*M; m++)
             {
-                sumnum += ((*(delta+i) - *(deltanew+i))*(*(delta+i) - *(deltanew+i)))/sumden;
+                sumnum += ((*(delta+m) - *(deltanew+m))*(*(delta+m) - *(deltanew+m)))/sumden;
             }
             convergence = sqrt(sumnum);                                         /* Convergence criterion */
- /*           Rprintf("%f, ", convergence); */
-            for(i=0; i<*P; i++)                                                 /* Update delta */
+            for(m=0; m<*M; m++)                                                 /* Update delta */
             {
-                *(delta+i) = *(deltanew+i);
+                *(delta+m) = *(deltanew+m);
             }
-    /*        Rprintf("C iteration %d \n", iter); */
             iter++;                                                             /* Update iteration number */
         }
     }
+
     /* Release memory */
     for(r=0; r<*R; r++)
     {
@@ -1894,7 +1907,10 @@ void HyperMax(double *alpha, double *beta, double *gamma, double *delta,
         {
             free(*(*(C+r)+i));
             free(*(*(D+r)+i));
-            free(*(*(Dvar+r)+i));
+        }
+        for(m=0; m<*M; m++)
+        {
+            free(*(*(Dvar+r)+m));
         }
         free(*(A+r));
         free(*(B+r));
@@ -1902,10 +1918,10 @@ void HyperMax(double *alpha, double *beta, double *gamma, double *delta,
         free(*(D+r));
         free(*(Dvar+r));
     }
-    for(i=0; i<*P; i++)
+    for(m=0; m<*M; m++)
     {
-        free(*(deltanewmat+i));
-        free(*(matp1+i));
+        free(*(deltanewmat+m));
+        free(*(matm1+m));
     }
     free(A);
     free(B);
@@ -1916,35 +1932,34 @@ void HyperMax(double *alpha, double *beta, double *gamma, double *delta,
     free(temp2);
     free(deltanewmat);
     free(deltanew);
-    free(matp1);
+    free(matm1);
     free(KK);
+    free(Rchoice);
+    free(all);
 }
-
 
 /******************************************************************/
 /*  This is the counterpart of Posterior_Mean.R.  It takes as     */
-/*  inputs alpha, beta, gamma, delta, v, x, y, K, P, T, and R     */
+/*  inputs alpha, beta, gamma, delta, v, x, y, u, K, P, T, R, M   */
 /*  and returns the value of the posterior mean of A, B, C, and D */
 /*  (in the case where x's are estimated), or the posterior mean  */
 /*  and variance of D (in the case where x's are not estimated).  */
 /******************************************************************/
-
-
 void PostMeanR(double *alpha, double *beta, double *gamma, double *delta,
-	double *v, double ***x, double ***y, int *K, int *P, int *T,
-	int *R,	double ***A, double ***B, double ***C, double ***D, double ***Dvar)
+	double *v, double ***x, double ***y, double ***u, int *K, int *P, int *T,
+	int *R,	int *M, double ***A, double ***B, double ***C, double ***D, double ***Dvar)
 {
-	int r, i, ii, *all, j, jj, *Rchoice, *KK;
+	int r, i, *all, j, jj, *Rchoice, *KK, m, mm;
 	double **Dmean, **Dv;
     double **MNLNinv, **LNMNinv, **JGFGinv, **FGJGinv, ***HNLS,
-            ***SNMH, ***EGFQ, ***QGJE, **matk1, **matp1;
+            ***SNMH, ***EGFQ, ***QGJE, **matk1, **matm1;
 
 	/* Load subprograms */
-	void SimplifyNoX(double*, double*, double***, int*, int*, int*, int*,
-        	double**, double**);
-	void SimplifyX(double*, double*, double*, double*, double*, double***,
-		double***, int*, int*, int*, int*, int*, double**, double**, double**,
-        	double**, double***, double***, double***,double***);
+	void SimplifyNoX(double*, double*, double***, double***, int*, int*, int*, int*, int*, double**,
+        double**);
+	void SimplifyX(double*, double*, double*, double*, double*, double***, double***, double***, int*,
+        int*, int*, int*, int*, int*, double**, double**, double**, double**, double***,
+        double***, double***, double***);
 
 	all = (int*) calloc(1, sizeof(int));
 	Rchoice = (int*) calloc(1, sizeof(int));
@@ -1958,17 +1973,21 @@ void PostMeanR(double *alpha, double *beta, double *gamma, double *delta,
 
     /* Allocate memory */
     Dmean = (double**) calloc(*P, sizeof(double*));
-    Dv = (double**) calloc(*P, sizeof(double*));
+    Dv = (double**) calloc(*M, sizeof(double*));
     for(i=0; i<*P; i++)
     {
-        *(Dmean + i) = (double*) calloc(*P, sizeof(double));
-        *(Dv + i) = (double*) calloc(*P, sizeof(double));
+        *(Dmean + i) = (double*) calloc(*M, sizeof(double));
     }
+    for(m=0; m<*M; m++)
+    {
+        *(Dv + m) = (double*) calloc(*M, sizeof(double));
+    }
+
     /* Allocate MNLNinf, LNMNinf, JGFGinv, FGJGinv, HNLS, SNMH, EGFQ, QFJE */
     MNLNinv = (double**) calloc(*KK, sizeof(double*));
-    LNMNinv = (double**) calloc(*P, sizeof(double*));
+    LNMNinv = (double**) calloc(*M, sizeof(double*));
     JGFGinv = (double**) calloc(*KK, sizeof(double*));
-    FGJGinv = (double**) calloc(*P, sizeof(double*));
+    FGJGinv = (double**) calloc(*M, sizeof(double*));
     HNLS = (double***) calloc(*KK, sizeof(double**));
     SNMH = (double***) calloc(*KK, sizeof(double**));
     EGFQ = (double***) calloc(*P, sizeof(double**));
@@ -1977,20 +1996,24 @@ void PostMeanR(double *alpha, double *beta, double *gamma, double *delta,
         *(MNLNinv+j) = (double*) calloc(*KK, sizeof(double));
         *(JGFGinv+j) = (double*) calloc(*KK, sizeof(double));
         *(HNLS+j) = (double**) calloc(*KK, sizeof(double*));
-        *(SNMH+j) = (double**) calloc(*P, sizeof(double*));
+        *(SNMH+j) = (double**) calloc(*M, sizeof(double*));
         for(jj=0; jj<*KK; jj++)
         {
             *(*(HNLS+j)+jj) = (double*) calloc(1, sizeof(double));
         }
-        for(i=0; i<*P; i++)
+        for(m=0; m<*M; m++)
         {
-            *(*(SNMH+j)+i) = (double*) calloc(1, sizeof(double));
+            *(*(SNMH+j)+m) = (double*) calloc(1, sizeof(double));
         }
     }
+    for(m=0; m<*M; m++)
+    {
+        *(LNMNinv+m) = (double*) calloc(*M, sizeof(double));
+        *(FGJGinv+m) = (double*) calloc(*M, sizeof(double));
+    }
+
     for(i=0; i<*P; i++)
     {
-        *(LNMNinv+i) = (double*) calloc(*P, sizeof(double));
-        *(FGJGinv+i) = (double*) calloc(*P, sizeof(double));
         *(EGFQ+i) = (double**) calloc(*KK, sizeof(double*));
         for(j=0; j<*KK; j++)
         {
@@ -2000,28 +2023,25 @@ void PostMeanR(double *alpha, double *beta, double *gamma, double *delta,
     QGJE = (double***) calloc(*P, sizeof(double**));
     for(i=0; i<*P; i++)
     {
-        *(QGJE+i) = (double**) calloc(*P, sizeof(double*));
-        for(ii=0; ii<*P; ii++)
+        *(QGJE+i) = (double**) calloc(*M, sizeof(double*));
+        for(m=0; m<*M; m++)
         {
-            *(*(QGJE+i)+ii) = (double*) calloc(1, sizeof(double));
+            *(*(QGJE+i)+m) = (double*) calloc(1, sizeof(double));
         }
     }
 
     matk1 = (double**) calloc(*KK, sizeof(double*));
-    matp1 = (double**) calloc(*P, sizeof(double*));
+    matm1 = (double**) calloc(*M, sizeof(double*));
     for(j=0; j<*KK; j++)
     {
         *(matk1+j) = (double*) calloc(1, sizeof(double));
     }
-    for(i=0; i<*P; i++)
+    for(m=0; m<*M; m++)
     {
-        *(matp1+i) = (double*) calloc(1, sizeof(double));
+        *(matm1+m) = (double*) calloc(1, sizeof(double));
     }
 
-
 	/* Begin function -- no x's */
-
-
 	if(*K==0)
 	{
 		for(r=0; r<*R; r++)
@@ -2030,23 +2050,37 @@ void PostMeanR(double *alpha, double *beta, double *gamma, double *delta,
 			/* Set Dmean and Dv to 0 */
 			for(i=0; i<*P; i++)
 			{
-			    for(ii=0; ii<*P; ii++)
+			    for(m=0; m<*M; m++)
 			    {
-			        *(*(Dmean+i)+ii) = 0;
-			        *(*(Dv+i)+ii) = 0;
+			        *(*(Dmean+i)+m) = 0;
 			    }
 			}
-			SimplifyNoX(delta, v, y, P, T, Rchoice, all, Dmean, Dv);
+			for(m=0; m<*M; m++)
+			{
+			    for(mm=0; mm<*M; mm++)
+			    {
+			        *(*(Dv+m)+mm) = 0;
+			    }
+			}
+			SimplifyNoX(delta, v, y, u, P, T, M, Rchoice, all, Dmean, Dv);
+
 			for(i=0; i<*P; i++)
 			{
-				for(ii=0; ii<*P; ii++)
+				for(m=0; m<*M; m++)
 				{
-					*(*(*(D+r)+i)+ii) = *(*(Dmean+i)+ii);
-					*(*(*(Dvar+r)+i)+ii) = *(*(Dv+i)+ii);
+					*(*(*(D+r)+i)+m) = *(*(Dmean+i)+m);
+				}
+			}
+			for(m=0; m<*M; m++)
+			{
+			    for(mm=0; mm<*M; mm++)
+			    {
+					*(*(*(Dvar+r)+m)+mm) = *(*(Dv+m)+mm);
 				}
 			}
 		}
 	}
+
 	/* Begin function -- x's */
 	if(*K > 0)
 	{
@@ -2063,18 +2097,24 @@ void PostMeanR(double *alpha, double *beta, double *gamma, double *delta,
                     *(*(JGFGinv+j)+jj)=0;
                     *(*(*(HNLS+j)+jj))=0;
                 }
-                for(i=0; i<*P; i++)
+                for(m=0; m<*M; m++)
                 {
-                    *(*(*(SNMH+j)+i))=0;
+                    *(*(*(SNMH+j)+m))=0;
+                }
+            }
+            for(m=0; m<*M; m++)
+            {
+                for(mm=0; mm<*M; mm++)
+                {
+                    *(*(LNMNinv+m)+mm)=0;
+                    *(*(FGJGinv+m)+mm)=0;
                 }
             }
             for(i=0; i<*P; i++)
             {
-                for(ii=0; ii<*P; ii++)
+                for(m=0; m<*M; m++)
                 {
-                    *(*(LNMNinv+i)+ii)=0;
-                    *(*(FGJGinv+i)+ii)=0;
-                    *(*(*(QGJE+i)+ii))=0;
+                    *(*(*(QGJE+i)+m))=0;
                 }
                 for(j=0; j<*K; j++)
                 {
@@ -2082,62 +2122,55 @@ void PostMeanR(double *alpha, double *beta, double *gamma, double *delta,
                 }
             }
 
-			SimplifyX(alpha, beta, gamma, delta, v, x, y, K, P,
-				T, all, Rchoice, MNLNinv, LNMNinv, JGFGinv,
-                FGJGinv, HNLS, SNMH, EGFQ,QGJE);
+			SimplifyX(alpha, beta, gamma, delta, v, x, y, u, K, P,
+				T, M, all, Rchoice, MNLNinv, LNMNinv, JGFGinv,
+                FGJGinv, HNLS, SNMH, EGFQ, QGJE);
+
 			for(j=0; j<*K; j++)
 			{
 				MatrixMult(MNLNinv, *K, *K, *(HNLS+j), 1, matk1);
-				MatrixMult(LNMNinv, *P, *P, *(SNMH+j), 1, matp1);
+				MatrixMult(LNMNinv, *M, *M, *(SNMH+j), 1, matm1);
 				for(jj=0; jj<*K; jj++)
 				{
 					*(*(*(A+r)+j)+jj) = *(*(matk1+jj));
 				}
-				for(i=0; i<*P; i++)
+				for(m=0; m<*M; m++)
 				{
-					*(*(*(B+r)+j)+i) = *(*(matp1+i));
+					*(*(*(B+r)+j)+m) = *(*(matm1+m));
 				}
 			}
 			for(i=0; i<*P; i++)
 			{
 				MatrixMult(JGFGinv, *K, *K, *(EGFQ+i), 1, matk1);
-				MatrixMult(FGJGinv, *P, *P, *(QGJE+i), 1, matp1);
+				MatrixMult(FGJGinv, *M, *M, *(QGJE+i), 1, matm1);
 				for(j=0; j<*K; j++)
 				{
 					*(*(*(C+r)+i)+j) = *(*(matk1+j));
 				}
-				for(ii=0; ii<*P; ii++)
+				for(m=0; m<*M; m++)
 				{
-					*(*(*(D+r)+i)+ii) = *(*(matp1+ii));
+					*(*(*(D+r)+i)+m) = *(*(matm1+m));
 				}
 			}
 		}
 	}
 
 	/* Free memory */
-
-	/* If no x's */
-    for(i=0; i<*P; i++)
-    {
-        free(*(Dmean+i));
-        free(*(Dv+i));
-    }
-    free(Dmean);
-    free(Dv);
     for(j=0; j<*KK; j++)
     {
         for(jj=0; jj<*KK; jj++)
         {
             free(*(*(HNLS+j)+jj));
         }
-        for(i=0; i<*P; i++)
+        for(m=0; m<*M; m++)
         {
-            free(*(*(SNMH+j)+i));
+            free(*(*(SNMH+j)+m));
         }
         free(*(HNLS+j));
         free(*(SNMH+j));
         free(*(MNLNinv+j));
         free(*(JGFGinv+j));
+        free(*(matk1+j));
     }
 
     for(i=0; i<*P; i++)
@@ -2146,14 +2179,21 @@ void PostMeanR(double *alpha, double *beta, double *gamma, double *delta,
         {
             free(*(*(EGFQ+i)+j));
         }
-        for(ii=0; ii<*P; ii++)
+        for(m=0; m<*M; m++)
         {
-            free(*(*(QGJE+i)+ii));
+            free(*(*(QGJE+i)+m));
         }
         free(*(EGFQ+i));
         free(*(QGJE+i));
-        free(*(LNMNinv+i));
-        free(*(FGJGinv+i));
+        free(*(Dmean+i));
+
+    }
+    for(m=0; m<*M; m++)
+    {
+        free(*(LNMNinv+m));
+        free(*(FGJGinv+m));
+        free(*(matm1+m));
+        free(*(Dv+m));
     }
     free(HNLS);
     free(SNMH);
@@ -2163,20 +2203,13 @@ void PostMeanR(double *alpha, double *beta, double *gamma, double *delta,
     free(QGJE);
     free(LNMNinv);
     free(FGJGinv);
-
-    for(j=0; j<*KK; j++)
-    {
-        free(*(matk1+j));
-    }
-    for(i=0; i<*P; i++)
-    {
-        free(*(matp1+i));
-    }
     free(matk1);
-    free(matp1);
+    free(matm1);
 	free(all);
 	free(Rchoice);
 	free(KK);
+    free(Dmean);
+    free(Dv);
 }
 
 
@@ -2185,12 +2218,11 @@ void PostMeanR(double *alpha, double *beta, double *gamma, double *delta,
 /* This function is the C counterpart of the program   */
 /* Variance_Estimator.R                                */
 /* *************************************************** */
-
-void VarMaxR(double ***x, double ***y, double ***C, double ***D, int *P,
-	int *R, int *T, int *K, double *vEst)
+void VarMaxR(double ***x, double ***y, double ***u, double ***C, double ***D, int *P,
+	int *R, int *T, int *K, int *M, double *vEst)
 {
-	int r, t, i, j, *KK;
-	double **vTemp, **vTempt, *temp, **tempDy, **tempCx, **tempyold,
+	int r, t, i, j, m, *KK;
+	double **vTemp, **vTempt, *temp, **tempDy, **tempCx, **tempu,
 		*tempyDy, *tempyCx, **tempxold, *tempyCxDy;
 
 	/* Load subprograms */
@@ -2208,7 +2240,7 @@ void VarMaxR(double ***x, double ***y, double ***C, double ***D, int *P,
 	temp = (double*) calloc(*P, sizeof(double));
 	tempDy = (double**) calloc(*P, sizeof(double*));
 	tempCx = (double**) calloc(*P, sizeof(double*));
-	tempyold = (double**) calloc(*P, sizeof(double*));
+	tempu= (double**) calloc(*M, sizeof(double*));
 	tempyDy = (double*) calloc(*P, sizeof(double));
 	tempyCx = (double*) calloc(*P, sizeof(double));
 	tempxold = (double**) calloc(*KK, sizeof(double*));
@@ -2223,7 +2255,9 @@ void VarMaxR(double ***x, double ***y, double ***C, double ***D, int *P,
 		*(tempDy+i) = (double*) calloc(1, sizeof(double));
 		*(tempCx+i) = (double*) calloc(1, sizeof(double));
 		*(vTempt+i) = (double*) calloc(*R, sizeof(double));
-		*(tempyold+i) = (double*) calloc(1, sizeof(double));
+	}
+	for(m=0; m<*M; m++) {
+		*(tempu+m) = (double*) calloc(1, sizeof(double));
 	}
 	for(j=0; j<*K; j++)
 	{
@@ -2239,13 +2273,13 @@ void VarMaxR(double ***x, double ***y, double ***C, double ***D, int *P,
 			{
 				*(temp+i) = 0;
 			}
-			for(t=1; t<*T; t++)
+			for(t=0; t<*T; t++)
 			{
-				for(i=0; i<*P; i++)
-				{
-					*(*(tempyold+i))=*(*(*(y+r)+i)+(t-1));
-				}
-				MatrixMult(*(D+r),*P,*P,tempyold,1,tempDy);
+			    for(m=0; m<*M; m++)
+			    {
+			        *(*(tempu+m)) =*(*(*(u+r)+m)+t);
+			    }
+				MatrixMult(*(D+r),*P,*M,tempu,1,tempDy);
 				for(i=0; i<*P; i++)
 				{
 					*(tempyDy+i)=*(*(*(y+r)+i)+t) - *(*(tempDy+i));
@@ -2261,50 +2295,38 @@ void VarMaxR(double ***x, double ***y, double ***C, double ***D, int *P,
 	}
 
 	/* Calculate the variance estimator if x's */
-        if(*K > 0)
+    if(*K > 0)
+    {
+        for(r=0; r<*R; r++)
         {
-                for(r=0; r<*R; r++)
+            for(i=0; i<*P; i++)
+            {
+                *(temp+i) = 0;
+            }
+            for(t=0; t<*T; t++)
+            {
+                for(m=0; m<*M; m++)
                 {
-                        for(i=0; i<*P; i++)
-                        {
-                                *(temp+i) = 0;
-                        }
-			for(j=0; j<*K; j++)
-			{
-				*(*(tempxold+j)) = *(*(*(x+r)+j));
-			}
-			MatrixMult(*(C+r),*P,*K,tempxold,1,tempCx);
-			for(i=0; i<*P; i++)
-			{
-				*(tempyCx+i)=*(*(*(y+r)+i)) - *(*(tempCx+i));
-				*(temp+i) += (*(tempyCx+i)) * (*(tempyCx+i));
-			}
-
-                        for(t=1; t<*T; t++)
-                        {
-                                for(i=0; i<*P; i++)
-                                {
-                                        *(*(tempyold+i))=*(*(*(y+r)+i)+(t-1));
-                                }
+                    *(*(tempu+m))=*(*(*(u+r)+m)+t);
+                }
 				for(j=0; j<*K; j++)
 				{
 					*(*(tempxold+j))=*(*(*(x+r)+j)+t);
 				}
-                MatrixMult(*(D+r),*P,*P,tempyold,1,tempDy);
+                MatrixMult(*(D+r),*P,*M,tempu,1,tempDy);
 				MatrixMult(*(C+r),*P,*K,tempxold,1,tempCx);
-                                for(i=0; i<*P; i++)
-                                {
-                                        *(tempyCxDy+i)=*(*(*(y+r)+i)+t) - *(*(tempCx+i)) - *(*(tempDy+i));
-                                        *(temp+i) += (*(tempyCxDy+i)) * (*(tempyCxDy+i));
-                                }
-                        }
-
-                        for(i=0; i<*P; i++)
-                        {
-                                *(*(vTemp+r)+i) = ( *(temp+i) / (*T) );
-                        }
+                for(i=0; i<*P; i++)
+                {
+                    *(tempyCxDy+i)=*(*(*(y+r)+i)+t) - *(*(tempCx+i)) - *(*(tempDy+i));
+                    *(temp+i) += (*(tempyCxDy+i)) * (*(tempyCxDy+i));
                 }
+            }
+            for(i=0; i<*P; i++)
+            {
+                *(*(vTemp+r)+i) = (*(temp+i)) / ((*T)-1);
+            }
         }
+    }
 
 	/* Take inverse of all elements of vTemp matrix */
 	for(r=0; r<*R; r++)
@@ -2332,7 +2354,10 @@ void VarMaxR(double ***x, double ***y, double ***C, double ***D, int *P,
 		free(*(tempDy+i));
 		free(*(tempCx+i));
 		free(*(vTempt+i));
-		free(*(tempyold+i));
+	}
+	for(m=0; m<*M; m++)
+	{
+	    free(*(tempu+m));
 	}
 	for(j=0; j<*KK; j++)
 	{
@@ -2346,7 +2371,7 @@ void VarMaxR(double ***x, double ***y, double ***C, double ***D, int *P,
 	free(temp);
 	free(tempDy);
 	free(tempCx);
-	free(tempyold);
+	free(tempu);
 	free(tempyDy);
     free(KK);
 }
@@ -2356,7 +2381,6 @@ void VarMaxR(double ***x, double ***y, double ***C, double ***D, int *P,
 /*  Function to calculate the median of a vector of a given length.  */
 /*  Will return the median as a double.                              */
 /*********************************************************************/
-
 double VecMedian(double *vector, int *length)
 {
 	int index1, index2;
@@ -2384,26 +2408,21 @@ double VecMedian(double *vector, int *length)
 }
 
 
-
-
 /*************************************************/
 /*  This is the C version of Simplifying_code.R  */
 /*  in the case where x's are estimated.         */
 /*************************************************/
-
 void SimplifyX(double *alpha, double *beta, double *gamma, double *delta,
-	double *v, double ***x, double ***y, int *K, int *P, int *T, int *all,
-	int *Rchoice,
-	double **MNLNinv, double **LNMNinv, double **JGFGinv,
+	double *v, double ***x, double ***y, double ***u, int *K, int *P, int *T, int *M, int *all,
+	int *Rchoice, double **MNLNinv, double **LNMNinv, double **JGFGinv,
 	double **FGJGinv, double ***HNLS, double ***SNMH, double ***EGFQ,
 	double ***QGJE)
 {
-	int rlower = 0, rupper = 0, i, j, ii, jj, r, t, *one;
-	double **xXx, **yXx, **yXy, **xXy, ***H, ***S, **M, **N, **L, **xtemp,
-		**txtemp, **ytemp, **tytemp, *xsingle, *ysingle, **J, **G,
-		**F, ***E, ***Q;
-	double **Linv, **Minv, **Finv, **Jinv, *det, **Nt, **Gt,
-		**matkk, **matpp, **matkp, **matpk;
+	int rlower = 0, rupper = 0, i, j, jj, r, t, *one, m, mm;
+	double **xXx, **uXx, **uXu, **xXu, ***H, ***S, **MM, **N, **L, **xtemp,
+		**txtemp, **utemp, **tutemp, *xsingle, *ysingle, **J, **G,
+		**F, ***E, ***Q, **Linv, **Minv, **Finv, **Jinv, *det, **Nt, **Gt,
+		**matkk, **matmm, **matkm, **matmk;
 
 	/* Allocate memory, set M, N, L, H, and S = 0 */
 	/* Allocate memory, set J, G, F, E, and Q = 0 */
@@ -2412,80 +2431,88 @@ void SimplifyX(double *alpha, double *beta, double *gamma, double *delta,
 	det = (double*) calloc(1, sizeof(double));
     H = (double***) calloc(*K, sizeof(double**));
     S = (double***) calloc(*K, sizeof(double**));
-    M = (double**) calloc(*K, sizeof(double*));
-    N = (double**) calloc(*P, sizeof(double*));
-    L = (double**) calloc(*P, sizeof(double*));
+    MM = (double**) calloc(*K, sizeof(double*));
+    N = (double**) calloc(*M, sizeof(double*));
+    L = (double**) calloc(*M, sizeof(double*));
     J = (double**) calloc(*K, sizeof(double*));
     G = (double**) calloc(*K, sizeof(double*));
-    F = (double**) calloc(*P, sizeof(double*));
+    F = (double**) calloc(*M, sizeof(double*));
     Q = (double***) calloc(*P, sizeof(double**));
     E = (double***) calloc(*P, sizeof(double**));
 
 	xXx = (double**) calloc(*K, sizeof(double*));
-	yXx = (double**) calloc(*P, sizeof(double*));
-	yXy = (double**) calloc(*P, sizeof(double*));
-	xXy = (double**) calloc(*K, sizeof(double*));
+	uXx = (double**) calloc(*M, sizeof(double*));
+	uXu = (double**) calloc(*M, sizeof(double*));
+	xXu = (double**) calloc(*K, sizeof(double*));
 	xtemp = (double**) calloc(*K, sizeof(double*));
 	txtemp = (double**) calloc(1, sizeof(double*));
-	ytemp = (double**) calloc(*P, sizeof(double*));
-	tytemp = (double**) calloc(1, sizeof(double*));
+	utemp = (double**) calloc(*M, sizeof(double*));
+	tutemp = (double**) calloc(1, sizeof(double*));
 	xsingle = (double*) calloc(1, sizeof(double));
 	ysingle = (double*) calloc(1, sizeof(double));
 
+    for(m=0; m<*M; m++)
+    {
+        *(N+m) = (double*) calloc(*K, sizeof(double));
+		*(L+m) = (double*) calloc(*M, sizeof(double));
+		*(F+m) = (double*) calloc(*M, sizeof(double));
+		*(utemp+m) = (double*) calloc(1, sizeof(double));
+		*(uXx+m) = (double*) calloc(*K, sizeof(double));
+		*(uXu+m) = (double*) calloc(*M, sizeof(double));
+		for(j=0; j<*K; j++)
+		{
+		    *(*(N+m)+j) = 0;
+		}
+		for(mm=0; mm<*M; mm++)
+		{
+            *(*(L+m)+mm) = 0;
+            *(*(F+m)+mm) = 0;
 
+		}
+    }
 	for(i=0; i<*P; i++)
 	{
-		*(yXx + i) = (double*) calloc(*K, sizeof(double));
-		*(yXy + i) = (double*) calloc(*P, sizeof(double));
-        *(ytemp + i) = (double*) calloc(1, sizeof(double));
-		*(N + i) = (double*) calloc(*K, sizeof(double));
-		*(L + i) = (double*) calloc(*P, sizeof(double));
-		*(F + i) = (double*) calloc(*P, sizeof(double));
 		*(E + i) = (double**) calloc(*K, sizeof(double*));
 		*(Q + i) = (double**) calloc(*P, sizeof(double*));
 		for(j=0; j<*K; j++)
 		{
-			*(*(N+i)+j) = 0;
 			*(*(E+i)+j) = (double*) calloc(1, sizeof(double));
 			*(*(*(E+i)+j)) = 0;
 		}
-		for(ii=0; ii<*P; ii++)
+		for(m=0; m<*M; m++)
 		{
-			*(*(L+i)+ii) = 0;
-			*(*(F+i)+ii) = 0;
-			*(*(Q+i)+ii) = (double*) calloc(1, sizeof(double));
-			*(*(*(Q+i)+ii)) = 0;
+			*(*(Q+i)+m) = (double*) calloc(1, sizeof(double));
+			*(*(*(Q+i)+m)) = 0;
 		}
 	}
 	for(j=0; j<*K; j++)
 	{
 		*(xXx + j) = (double*) calloc(*K, sizeof(double));
-		*(xXy + j) = (double*) calloc(*P, sizeof(double));
+		*(xXu + j) = (double*) calloc(*M, sizeof(double));
 		*(xtemp + j) = (double*) calloc(1, sizeof(double));
         *(H + j) = (double**) calloc(*K, sizeof(double*));
-        *(S + j) = (double**) calloc(*P, sizeof(double*));
-		*(M + j) = (double*) calloc(*K, sizeof(double));
+        *(S + j) = (double**) calloc(*M, sizeof(double*));
+		*(MM + j) = (double*) calloc(*K, sizeof(double));
 		*(J + j) = (double*) calloc(*K, sizeof(double));
-		*(G + j) = (double*) calloc(*P, sizeof(double));
+		*(G + j) = (double*) calloc(*M, sizeof(double));
 		for(jj=0; jj<*K; jj++)
 		{
 			*(*(H+j)+jj) = (double*) calloc(1, sizeof(double));
-			*(*(M+j)+jj) = 0;
+			*(*(MM+j)+jj) = 0;
 			*(*(*(H+j)+jj)) = 0;
 			*(*(J+j)+jj) = 0;
 		}
-		for(i=0; i<*P; i++)
+		for(m=0; m<*M; m++)
 		{
-			*(*(S+j)+i) = (double*) calloc(1, sizeof(double));
-			*(*(*(S+j)+i)) = 0;
-			*(*(G+j)+i) = 0;
+			*(*(S+j)+m) = (double*) calloc(1, sizeof(double));
+			*(*(*(S+j)+m)) = 0;
+			*(*(G+j)+m) = 0;
 		}
 	}
 	*(txtemp) = (double*) calloc(*K, sizeof(double));
-	*(tytemp) = (double*) calloc(*P, sizeof(double));
+	*(tutemp) = (double*) calloc(*M, sizeof(double));
 
 	/* Set limits of function */
-
 	if(*all == 1)
 	{
 		rlower = 0;
@@ -2499,93 +2526,91 @@ void SimplifyX(double *alpha, double *beta, double *gamma, double *delta,
 	*one = 1;
 
 	/* Begin function part 1 (corresponds to simplify.1 in R code) */
-
 	for(r=rlower; r<rupper; r++)
 	{
-		for(t=0; t<((*T)-1); t++)
+        for(t=1; t<*T; t++)
 		{
-			for(i=0; i<*P; i++)
+			for(m=0; m<*M; m++)
 			{
-				*(*(ytemp+i)) = *(*(*(y+r)+i)+t);
-				*(*(tytemp)+i) = *(*(*(y+r)+i)+t);
+				*(*(utemp+m)) = *(*(*(u+r)+m)+t);
+				*(*(tutemp)+m) = *(*(*(u+r)+m)+t);
 			}
 			for(j=0; j<*K; j++)
             {
-                *(*(xtemp+j)) = *(*(*(x+r)+j)+(t+1));
+                *(*(xtemp+j)) = *(*(*(x+r)+j)+t);           /* x_{t} */
             }
-            MatrixMult(xtemp,*K,1,tytemp,*P,xXy);           /* temp.kp */
+            MatrixMult(xtemp,*K,1,tutemp,*M,xXu);           /* temp.kp */
 
-  			for(j=0; j<*K; j++)
+  			for(j=0; j<*K; j++)                             /* x_{t-1} */
             {
-                *(*(xtemp+j)) = *(*(*(x+r)+j)+t);
-                *(*(txtemp)+j) = *(*(*(x+r)+j)+t);
+                *(*(xtemp+j)) = *(*(*(x+r)+j)+(t-1));
+                *(*(txtemp)+j) = *(*(*(x+r)+j)+(t-1));
             }
 
 			MatrixMult(xtemp,*K,1,txtemp,*K,xXx);		    /* temp.kk */
-			MatrixMult(ytemp,*P,1,txtemp,*K,yXx);			/* temp.pk */
-			MatrixMult(ytemp,*P,1,tytemp,*P,yXy);			/* temp.pp */
+			MatrixMult(utemp,*M,1,txtemp,*K,uXx);			/* temp.pk */
+			MatrixMult(utemp,*M,1,tutemp,*M,uXu);			/* temp.pp */
 
 			for(j=0; j<*K; j++)
 			{
 				for(jj=0; jj<*K; jj++)
 				{
-					*(*(M+j)+jj) += *(*(xXx+j)+jj);			/* M */
-					*(*(J+j)+jj) += *(*(xXx+j)+jj);			/* J */
+					*(*(MM+j)+jj) += *(*(xXx+j)+jj);			/* M */
+					*(*(J+j)+jj) += *(*(xXx+j)+jj);			/* J, need to add t = T */
 				}
 
-				for(i=0; i<*P; i++)
+				for(m=0; m<*M; m++)
 				{
-					*(*(G+j)+i) += *(*(xXy+j)+i);			/* G */
+					*(*(G+j)+m) += *(*(xXu+j)+m);			/* G, need to add t = 1 */
 				}
 			}
 
-
-			for(i=0; i<*P; i++)
+			for(m=0; m<*M; m++)
 			{
 				for(j=0; j<*K; j++)
 				{
-					*(*(N+i)+j) += *(*(yXx+i)+j);			/* N */
+					*(*(N+m)+j) += *(*(uXx+m)+j);			/* N */
 				}
-				for(ii=0; ii<*P; ii++)
+				for(mm=0; mm<*M; mm++)
 				{
-					*(*(L+i)+ii) += *(*(yXy+i)+ii);			/* L */
-					*(*(F+i)+ii) += *(*(yXy+i)+ii);			/* F */
+					*(*(L+m)+mm) += *(*(uXu+m)+mm);			/* L */
+					*(*(F+m)+mm) += *(*(uXu+m)+mm);			/* F, need to add t = 1 */
 				}
 			}
 
 			for(j=0; j<*K; j++)
 			{
-				*xsingle = *(*(*(x+r)+j)+(t+1));
+				*xsingle = *(*(*(x+r)+j)+t);
 				for(jj=0; jj<*K; jj++)
 				{							                /* H */
 					*(*(*(H+j)+jj)) += (*(*(xtemp+jj))) *
 						(*xsingle);
 				}
-				for(i=0; i<*P; i++)
+				for(m=0; m<*M; m++)
 				{							                /* S */
-					*(*(*(S+j)+i)) += (*(*(ytemp+i))) *
+					*(*(*(S+j)+m)) += (*(*(utemp+m))) *
 						(*xsingle);
 				}
 			}
 
 			for(i=0; i<*P; i++)
 			{
-				*ysingle = *(*(*(y+r)+i)+t);
-				for(j=0; j<*K; j++)					        /* E */
+				*ysingle = *(*(*(y+r)+i)+(t-1));
+				for(j=0; j<*K; j++)					        /* E, need to add t = T */
 				{
 					*(*(*(E+i)+j)) += (*(*(xtemp+j))) *
 						(*ysingle);
 				}
-				*ysingle = *(*(*(y+r)+i)+(t+1));
-				for(ii=0; ii<*P; ii++)
-				{							                /* Q */
-					*(*(*(Q+i)+ii)) += (*(*(ytemp+ii))) *
+				*ysingle = *(*(*(y+r)+i)+t);
+				for(m=0; m<*M; m++)
+				{							                /* Q, need to add t = 1 */
+					*(*(*(Q+i)+m)) += (*(*(utemp+m))) *
 						(*ysingle);
 				}
 			}
 		}
 
-		/* Add last time T to the J matrix and E list */
+		/* Add time t = T to the J matrix and E list */
   		for(j=0; j<*K; j++)
         {
             *(*(xtemp+j)) = *(*(*(x+r)+j)+(*T-1));
@@ -2602,110 +2627,130 @@ void SimplifyX(double *alpha, double *beta, double *gamma, double *delta,
 			MatrixSum(*(E+i), xtemp, *(E+i), K, one);
 		}
 
+		/* Add first time t = 1 to the G and F matrices and the Q list*/
         for(j=0; j<*K; j++)
-		{
-            *(*(M+j)+j) += *(alpha+j);
-            *(*(J+j)+j) += *(gamma+j);
+        {
+            *(*(xtemp+j)) = *(*(*(x+r)+j));
         }
+        for(m=0; m<*M; m++)
+        {
+            *(*(utemp+m)) = *(*(*(u+r)+m));
+            *(*(tutemp)+m) = *(*(*(u+r)+m));
+        }
+        MatrixMult(xtemp,*K,1,tutemp,*M,xXu);
+        MatrixSum(G,xXu,G,K,M);
+        MatrixMult(utemp,*M,1,tutemp,*M,uXu);
+        MatrixSum(F,uXu,F,M,M);
         for(i=0; i<*P; i++)
         {
-            *(*(L+i)+i) += *(beta+i);
-            *(*(F+i)+i) += *(delta+i);
+            for(m=0; m<*M; m++)
+            {
+                *(*(utemp+m)) = (*(*(*(u+r)+m))) * (*(*(*(y+r)+i)));
+            }
+            MatrixSum(*(Q+i), utemp, *(Q+i), M, one);
+        }
+
+        for(j=0; j<*K; j++)
+		{
+            *(*(MM+j)+j) += *(alpha+j);
+            *(*(J+j)+j) += *(gamma+j);
+        }
+        for(m=0; m<*M; m++)
+        {
+            *(*(L+m)+m) += *(beta+m);
+            *(*(F+m)+m) += *(delta+m);
         }
 	}
 
     /* Free Unnecessary Memory */
     /* Keep M, N, L, S, H, J, G, F, E, and Q for later */
-	for(i=0; i<*P; i++)
+	for(m=0; m<*M; m++)
     {
-        free(*(ytemp+i));
-        free(*(yXx+i));
-        free(*(yXy+i));
+        free(*(utemp+m));
+        free(*(uXx+m));
+        free(*(uXu+m));
     }
     for(j=0; j<*K; j++)
     {
         free(*(xtemp+j));
         free(*(xXx+j));
-		free(*(xXy+j));
+		free(*(xXu+j));
     }
     free(*(txtemp));
-    free(*(tytemp));
-
+    free(*(tutemp));
     free(xsingle);
 	free(ysingle);
-    free(ytemp);
+    free(utemp);
     free(xtemp);
     free(txtemp);
-    free(tytemp);
+    free(tutemp);
     free(xXx);
-	free(xXy);
-    free(yXx);
-    free(yXy);
+	free(xXu);
+    free(uXx);
+    free(uXu);
 
 	/* Begin function part 2 (corresponds to simplify in R code) */
 	/* Allocate vectors Linv, Minv, Finv, and Jinv */
-
-	Linv = (double**) calloc(*P, sizeof(double*));
+	Linv = (double**) calloc(*M, sizeof(double*));
 	Minv = (double**) calloc(*K, sizeof(double*));
-	Finv = (double**) calloc(*P, sizeof(double*));
+	Finv = (double**) calloc(*M, sizeof(double*));
 	Jinv = (double**) calloc(*K, sizeof(double*));
 	Nt = (double**) calloc(*K, sizeof(double*));
-	Gt = (double**) calloc(*P, sizeof(double*));
+	Gt = (double**) calloc(*M, sizeof(double*));
 	matkk = (double**) calloc(*K, sizeof(double*));
-	matpp = (double**) calloc(*P, sizeof(double*));
-	matkp = (double**) calloc(*K, sizeof(double*));
-	matpk =	(double**) calloc(*P, sizeof(double*));
-
-	for(i=0; i<*P; i++)
-	{
-		*(Linv+i) = (double*) calloc(*P, sizeof(double));
-		*(Finv+i) = (double*) calloc(*P, sizeof(double));
-		*(Gt+i) = (double*) calloc(*K, sizeof(double));
-		*(matpp+i) = (double*) calloc(*P, sizeof(double));
-		*(matpk+i) = (double*) calloc(*K, sizeof(double));
-	}
+	matmm = (double**) calloc(*M, sizeof(double*));
+	matkm = (double**) calloc(*K, sizeof(double*));
+	matmk =	(double**) calloc(*M, sizeof(double*));
+    for(m=0; m<*M; m++)
+    {
+        *(Linv+m) = (double*) calloc(*M, sizeof(double));
+        *(Finv+m) = (double*) calloc(*M, sizeof(double));
+		*(Gt+m) = (double*) calloc(*K, sizeof(double));
+        *(matmm+m) = (double*) calloc(*M, sizeof(double));
+		*(matmk+m) = (double*) calloc(*K, sizeof(double));
+    }
 	for(j=0; j<*K; j++)
 	{
 		*(Minv+j) = (double*) calloc(*K, sizeof(double));
 		*(Jinv+j) = (double*) calloc(*K, sizeof(double));
-		*(Nt+j) = (double*) calloc(*P, sizeof(double));
+		*(Nt+j) = (double*) calloc(*M, sizeof(double));
 		*(matkk+j) = (double*) calloc(*K, sizeof(double));
-		*(matkp+j) = (double*) calloc(*P, sizeof(double));
+		*(matkm+j) = (double*) calloc(*M, sizeof(double));
 	}
 
 	/* Find matrix inverses */
-	MatrixInv(L, *P, Linv, det);							/* L.inv */
-	MatrixInv(M, *K, Minv, det);							/* M.inv */
-	MatrixInv(F, *P, Finv, det);							/* F.inv */
+	MatrixInv(L, *M, Linv, det);							/* L.inv */
+	MatrixInv(MM, *K, Minv, det);							/* M.inv */
+	MatrixInv(F, *M, Finv, det);							/* F.inv */
 	MatrixInv(J, *K, Jinv, det);							/* J.inv */
 
-	MatrixTrans(N, Nt, P, K);
-	MatrixTrans(G, Gt, K, P);
+	MatrixTrans(N, Nt, M, K);
+	MatrixTrans(G, Gt, K, M);
 
-	MatrixMult(Nt, *K, *P, Linv, *P, matkp);
-	MatrixMult(matkp, *K, *P, N, *K, matkk);
+	MatrixMult(Nt, *K, *M, Linv, *M, matkm);
+	MatrixMult(matkm, *K, *M, N, *K, matkk);
 	for(j=0; j<*K; j++)
 	{
 		for(jj=0; jj<*K; jj++)
 		{
-			*(*(matkk+j)+jj) = *(*(M+j)+jj) - *(*(matkk+j)+jj);
+			*(*(matkk+j)+jj) = *(*(MM+j)+jj) - *(*(matkk+j)+jj);
 		}
 	}
 	MatrixInv(matkk, *K, MNLNinv, det);						/* MNLN.inv */
 
-	MatrixMult(N, *P, *K, Minv, *K, matpk);
-	MatrixMult(matpk, *P, *K, Nt, *P, matpp);
-	for(i=0; i<*P; i++)
+	MatrixMult(N, *M, *K, Minv, *K, matmk);
+	MatrixMult(matmk, *M, *K, Nt, *M, matmm);
+	for(m=0; m<*M; m++)
 	{
-		for(ii=0; ii<*P; ii++)
+		for(mm=0; mm<*M; mm++)
 		{
-			*(*(matpp+i)+ii) = *(*(L+i)+ii) - *(*(matpp+i)+ii);
+			*(*(matmm+m)+mm) = *(*(L+m)+mm) - *(*(matmm+m)+mm);
 		}
 	}
-	MatrixInv(matpp, *P, LNMNinv, det);						/* LNMN.inv */
+	MatrixInv(matmm, *M, LNMNinv, det);						/* LNMN.inv */
 
-	MatrixMult(G, *K, *P, Finv, *P, matkp);
-	MatrixMult(matkp, *K, *P, Gt, *K, matkk);
+	MatrixMult(G, *K, *M, Finv, *M, matkm);
+	MatrixMult(matkm, *K, *M, Gt, *K, matkk);
 	for(j=0; j<*K; j++)
 	{
 		for(jj=0; jj<*K; jj++)
@@ -2715,87 +2760,86 @@ void SimplifyX(double *alpha, double *beta, double *gamma, double *delta,
 	}
 	MatrixInv(matkk, *K, JGFGinv, det);						/*  JGFG.inv */
 
-	MatrixMult(Gt, *P, *K, Jinv, *K, matpk);
-	MatrixMult(matpk, *P, *K, G, *P, matpp);
-	for(i=0; i<*P; i++)
+	MatrixMult(Gt, *M, *K, Jinv, *K, matmk);
+	MatrixMult(matmk, *M, *K, G, *M, matmm);
+	for(m=0; m<*M; m++)
 	{
-		for(ii=0; ii<*P; ii++)
+		for(mm=0; mm<*M; mm++)
 		{
-			*(*(matpp+i)+ii) = *(*(F+i)+ii) - *(*(matpp+i)+ii);
+			*(*(matmm+m)+mm) = *(*(F+m)+mm) - *(*(matmm+m)+mm);
 		}
 	}
-	MatrixInv(matpp, *P, FGJGinv, det);						/* FGJG.inv */
+	MatrixInv(matmm, *M, FGJGinv, det);						/* FGJG.inv */
 
 	for(j=0; j<*K; j++)
 	{
-		MatrixMult(Nt, *K, *P, Linv, *P, matkp);
-		MatrixMult(matkp, *K, *P, *(S+j), 1, *(HNLS+j));
-		MatrixMult(N, *P, *K, Minv, *K, matpk);
-		MatrixMult(matpk, *P, *K, *(H+j), 1, *(SNMH+j));
+		MatrixMult(Nt, *K, *M, Linv, *M, matkm);
+		MatrixMult(matkm, *K, *M, *(S+j), 1, *(HNLS+j));
+		MatrixMult(N, *M, *K, Minv, *K, matmk);
+		MatrixMult(matmk, *M, *K, *(H+j), 1, *(SNMH+j));
 		for(jj=0; jj<*K; jj++)
 		{
-			*(*(*(HNLS+j)+jj)) = *(*(*(H+j)+jj)) - *(*(*(HNLS+j)+jj));	/* HNLS */
+			*(*(*(HNLS+j)+jj)) = *(*(*(H+j)+jj)) - *(*(*(HNLS+j)+jj)); 	/* HNLS */
 		}
-		for(i=0; i<*P; i++)
+		for(m=0; m<*M; m++)
 		{
-			*(*(*(SNMH+j)+i)) = *(*(*(S+j)+i)) - *(*(*(SNMH+j)+i));		/* SNMH */
+			*(*(*(SNMH+j)+m)) = *(*(*(S+j)+m)) - *(*(*(SNMH+j)+m));	 	/* SNMH */
 		}
 	}
 
 	for(i=0; i<*P; i++)
 	{
-		MatrixMult(G, *K, *P, Finv, *P, matkp);
-		MatrixMult(matkp, *K, *P, *(Q+i), 1, *(EGFQ+i));
-		MatrixMult(Gt, *P, *K, Jinv, *K, matpk);
-		MatrixMult(matpk, *P, *K, *(E+i), 1, *(QGJE+i));
+		MatrixMult(G, *K, *M, Finv, *M, matkm);
+		MatrixMult(matkm, *K, *M, *(Q+i), 1, *(EGFQ+i));
+		MatrixMult(Gt, *M, *K, Jinv, *K, matmk);
+		MatrixMult(matmk, *M, *K, *(E+i), 1, *(QGJE+i));
 		for(j=0; j<*K; j++)
 		{
 			*(*(*(EGFQ+i)+j)) = *(*(*(E+i)+j)) - *(*(*(EGFQ+i)+j));
 		}
-		for(ii=0; ii<*P; ii++)
+		for(m=0; m<*M; m++)
 		{
-			*(*(*(QGJE+i)+ii)) = *(*(*(Q+i)+ii)) - *(*(*(QGJE+i)+ii));
+			*(*(*(QGJE+i)+m)) = *(*(*(Q+i)+m)) - *(*(*(QGJE+i)+m));
 		}
 	}
 
 	/* Free Memory */
 	for(i=0; i<*P; i++)
 	{
-		free(*(N+i));
-		free(*(L+i));
 	    for(j=0; j<*K; j++)
 		{
 			free(*(*(E+i)+j));
 		}
-		for(ii=0; ii<*P; ii++)
+		for(m=0; m<*M; m++)
 		{
-			free(*(*(Q+i)+ii));
+			free(*(*(Q+i)+m));
 		}
 		free(*(E+i));
 		free(*(Q+i));
-		free(*(F+i));
-		free(*(Linv+i));
-		free(*(Finv+i));
-		free(*(Gt+i));
-		free(*(matpp+i));
-		free(*(matpk+i));
 	}
-	free(matpp);
-	free(matpk);
-	free(Gt);
-	free(Linv);
-	free(Finv);
+
+    for(m=0; m<*M; m++)
+    {
+        free(*(N+m));
+        free(*(L+m));
+        free(*(F+m));
+        free(*(Linv+m));
+		free(*(Finv+m));
+        free(*(Gt+m));
+        free(*(matmm+m));
+		free(*(matmk+m));
+    }
 
 	for(j=0; j<*K; j++)
 	{
-		free(*(M+j));
+		free(*(MM+j));
 		for(jj=0; jj<*K; jj++)
 		{
 			free(*(*(H+j)+jj));
 		}
-		for(i=0; i<*P; i++)
+		for(m=0; m<*M; m++)
 		{
-			free(*(*(S+j)+i));
+			free(*(*(S+j)+m));
 		}
 		free(*(H+j));
 		free(*(S+j));
@@ -2805,10 +2849,15 @@ void SimplifyX(double *alpha, double *beta, double *gamma, double *delta,
 		free(*(Jinv+j));
 		free(*(Nt+j));
 		free(*(matkk+j));
-		free(*(matkp+j));
+		free(*(matkm+j));
 	}
+	free(matmm);
+	free(matmk);
+	free(Gt);
+	free(Linv);
+	free(Finv);
 	free(matkk);
-	free(matkp);
+	free(matkm);
 	free(Nt);
 	free(Minv);
 	free(Jinv);
@@ -2819,85 +2868,85 @@ void SimplifyX(double *alpha, double *beta, double *gamma, double *delta,
 	free(J);
 	free(H);
 	free(S);
-	free(M);
+	free(MM);
 	free(N);
 	free(L);
 	free(det);
 	free(one);
 }
 
-
-
 /*********************************************************************************/
 /*  Simplify code, corresponds to the simplify.2 and simplify functions in R     */
 /*  in the case where there are no x's to be estimated.  The inputs are          */
-/*  delta = current value of delta, v = current value of d, y, P, T,             */
+/*  delta = current value of delta, v = current value of v, y, u, P, T, M,       */
 /*  Rchoice (=a given r if all = FALSE, =R if all = TRUE), all = whether 	     */
 /*  estimation is done for a single replicate (FALSE) or all replicates (TRUE),  */
 /*  DmeanNox = matrix to hold D mean, DvarNox = matrix to hold Dvar.		     */
 /*										                                         */
 /*  Note: This is the base variance, to get actual variance for each row, need to*/
 /*  multiply by v_i^(-1).							                             */
+/*  DmeanNox is PxM, and DvarNox is MxM                                          */
 /*********************************************************************************/
-
-void SimplifyNoX(double *delta, double *v,
-	double ***y, int *P, int *T, int *Rchoice, int *all,
-	double **DmeanNox, double **DvarNox)
+void SimplifyNoX(double *delta, double *v, double ***y, double ***u, int *P, int *T,
+    int *M, int *Rchoice, int *all, double **DmeanNox, double **DvarNox)
 {
-	int lower = 0, upper = 0, r, t, i, ii;
-	double **p1, **p2, **ytemp, **tytemp, **varp2temp, **yXy, **DmeanNoxt, *det;
+	int lower = 0, upper = 0, r, t, i, m, mm;
+	double **m1, **m2, **utemp, **tutemp, **uXu, **DmeanNoxt, *det;
     if(*all == 1) {lower = 0; upper = *Rchoice;}
     if(*all == 0) {lower = *Rchoice; upper = (*Rchoice)+1;}
 
 	/* Allocate memory and initialize */
 	det = (double*) calloc(1, sizeof(double));
-	p1 = (double**) calloc(*P, sizeof(double*));
-	p2 = (double**) calloc(*P, sizeof(double*));
-	yXy = (double**) calloc(*P, sizeof(double*));
-	ytemp = (double**) calloc(*P, sizeof(double*));
-	tytemp = (double**) calloc(1, sizeof(double*));
-	varp2temp = (double**) calloc(*P, sizeof(double*));
-	DmeanNoxt = (double**) calloc(*P, sizeof(double*));
-	for(i=0; i<*P; i++)
+	m1 = (double**) calloc(*M, sizeof(double*));
+	m2 = (double**) calloc(*M, sizeof(double*));
+	uXu = (double**) calloc(*M, sizeof(double*));
+	utemp = (double**) calloc(*M, sizeof(double*));
+	tutemp = (double**) calloc(1, sizeof(double*));
+	DmeanNoxt = (double**) calloc(*M, sizeof(double*));
+	for(m=0; m<*M; m++)
 	{
-		*(p1+i) = (double*) calloc(*P, sizeof(double));
-		*(p2+i) = (double*) calloc(*P, sizeof(double));
-		*(yXy+i) = (double*) calloc(*P, sizeof(double));
-		*(ytemp+i) = (double*) calloc(1, sizeof(double));
-		*(varp2temp+i) = (double*) calloc(1, sizeof(double));
-		*(DmeanNoxt+i) = (double*) calloc(*P, sizeof(double));
-		for(ii=0; ii<*P; ii++)
-		{
-			*(*(p1+i)+ii) = 0;
-			*(*(p2+i)+ii) = 0;
-		}
+	    *(m1+m) = (double*) calloc(*M, sizeof(double));
+        *(m2+m) = (double*) calloc(*P, sizeof(double));
+        *(utemp+m) = (double*) calloc(1, sizeof(double));
+        *(uXu+m) = (double*) calloc(*M, sizeof(double));
+        *(DmeanNoxt+m) = (double*) calloc(*P, sizeof(double));
+	    for(mm=0; mm<*M; mm++)
+	    {
+	        *(*(m1+m)+mm) = 0;
+	    }
+	    for(i=0; i<*P; i++)
+	    {
+	        *(*(m2+m)+i) = 0;
+	    }
 	}
-	*(tytemp) = (double*) calloc(*P, sizeof(double));
+	*(tutemp) = (double*) calloc(*M, sizeof(double));
+
+	/* Begin function, Part 1 */
+	/* Corresponds to simplify.2 in R code */
 
 	for(r=lower; r<upper; r++)
 	{
-		for(t=0; t<((*T)-1); t++)
+		for(t=0; t<*T; t++)
 		{
-			for(i=0; i<*P; i++)
+			for(m=0; m<*M; m++)
 			{
-				*(*(ytemp+i)) = *(*(*(y+r)+i)+t);
-				*(*(tytemp)+i) = *(*(*(y+r)+i)+t);
+				*(*(utemp+m)) = *(*(*(u+r)+m)+t);
+				*(*(tutemp)+m) = *(*(*(u+r)+m)+t);
 			}
-			MatrixMult(ytemp, *P, 1, tytemp, *P, yXy);
-
-			for(i=0; i<*P; i++)
+			MatrixMult(utemp, *M, 1, tutemp, *M, uXu);
+			for(m=0; m<*M; m++)
 			{
-				for(ii=0; ii<*P; ii++)
+				for(mm=0; mm<*M; mm++)
 				{
-					*(*(p1+i)+ii) += *(*(yXy+i)+ii);
+					*(*(m1+m)+mm) += *(*(uXu+m)+mm);
 				}
 			}
-			for(i=0; i<*P; i++)
+			for(m=0; m<*M; m++)
 			{
-				for(ii=0; ii<*P; ii++)
+				for(i=0; i<*P; i++)
 				{
-					*(*(p2+i)+ii) += (*(*(ytemp+i))) *
-						(*(*(*(y+r)+ii)+(t+1)));
+					*(*(m2+m)+i) += (*(*(utemp+m))) *
+						(*(*(*(y+r)+i)+t));
 				}
 			}
 		}
@@ -2906,40 +2955,35 @@ void SimplifyNoX(double *delta, double *v,
 	/* Begin function, Part 2 */
 	/* Corresponds to simplify in R code */
 
-	for(i=0; i<*P; i++)
+	for(m=0; m<*M; m++)
 	{
-		*(*(p1+i)+i) += *(delta + i);
+		*(*(m1+m)+m) += *(delta + m);
 	}
+
 	/* This is the base variance, to get actual variance for each row, need to multiply by v_i^(-1) */
-	MatrixInv(p1, *P, DvarNox, det);
+	MatrixInv(m1, *M, DvarNox, det);\
 
 	/* This is the mean */
-	MatrixMult(DvarNox,*P,*P,p2,*P,DmeanNoxt);
-	MatrixTrans(DmeanNoxt, DmeanNox, P, P);
+	MatrixMult(DvarNox,*M,*M,m2,*P,DmeanNoxt);
+	MatrixTrans(DmeanNoxt, DmeanNox, M, P);
 
 	/* Free memory */
-	free(*tytemp);
-	for(i=0; i<*P; i++)
+	for(m=0; m<*M; m++)
 	{
-		free(*(p1+i));
-		free(*(p2+i));
-		free(*(ytemp+i));
-		free(*(yXy+i));
-		free(*(varp2temp+i));
-		free(*(DmeanNoxt+i));
+	    free(*(m1+m));
+	    free(*(m2+m));
+        free(*(utemp+m));
+        free(*(uXu+m));
+        free(*(DmeanNoxt+m));
 	}
-	free(p1);
-	free(p2);
+	free(m1);
+	free(m2);
 	free(DmeanNoxt);
-	free(yXy);
-	free(varp2temp);
-	free(ytemp);
-	free(tytemp);
+	free(uXu);
+	free(utemp);
+	free(tutemp);
 	free(det);
 }
-
-
-
 
 
 /******************************************************************/
@@ -2950,7 +2994,6 @@ void SimplifyNoX(double *delta, double *v,
 /* 								                                  */
 /*  Code needs to be compiled with -llapack.                      */
 /******************************************************************/
-
 void MatrixInv(double **mat, int n, double **invmat, double *det)
 {
 	double **u, *w, **v;
@@ -3017,9 +3060,8 @@ void MatrixInv(double **mat, int n, double **invmat, double *det)
 /*  This is a function to perform matrix multiplication, m1 %*% m2 = sol.   */
 /*  This code is thanks to Cherie Ochsenfeld, and uses the BLAS function.   */
 /*  m1r and m1c are the number of rows and cols of m1, and m2c is the       */
-/*  number of columns of m2. 					`	    */
+/*  number of columns of m2. 					`	                        */
 /****************************************************************************/
-
 void MatrixMult(double **m1, int m1r, int m1c, double **m2,
 	int m2c, double **sol)
 {
@@ -3048,12 +3090,10 @@ void MatrixMult(double **m1, int m1r, int m1c, double **m2,
 	free(C);
 }
 
-
 /************************************************************************/
 /*  Function to perform element-wise addition of two matrices,          */
 /*  m1 + m2 = sum.                                                      */
 /************************************************************************/
-
 void MatrixSum(double **m1, double **m2, double **sum, int *row, int *col)
 {
 	int i, j;
@@ -3071,7 +3111,6 @@ void MatrixSum(double **m1, double **m2, double **sum, int *row, int *col)
 /*  pointer, mt = t(m).  "row" and "col" are the number of   */
 /*  rows and columns of the original matrix, m.              */
 /*************************************************************/
-
 void MatrixTrans(double **m, double **mt, int *row, int *col)
 {
 	int i,j;

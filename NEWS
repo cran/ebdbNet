@@ -1,0 +1,22 @@
+            
+                RELEASE HISTORY OF ebdbNet PACKAGE
+             ========================================
+
+   		CHANGES IN ebdbNet VERSION 1.1
+
+Changes:
+- The licence was changed from "GNU" to "GNU GPL 3 or later".
+- Functions data.format and visualize were added to format longitudinal data and graph results, respectively.
+- The Rgraphviz library was added to the list of suggested packages.
+- Some parts of the documentation were updated.
+- Small bugs in the C source code were fixed.
+- Code was adjusted to allow the incorporation of arbitrary driving inputs
+  in addition to feedback from previous time points.
+
+Newly added:
+- Graphing capabilities using the graphviz package.
+
+
+		CHANGES in ebdbNet VERSION 1.0
+
+This is the first release (11 November 2009).
