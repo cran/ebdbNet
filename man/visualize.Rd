@@ -3,9 +3,8 @@
 \title{Visualize Network Structure}
 \description{
 This function allows the user to visualize the network structure determined
-by the EBDBN, either by appropriately formatting results to be imported in
-Cytoscape, or invoking the Rgraphviz package to visualize network directly
-in R.
+by the EBDBN by appropriately formatting results to be imported in
+Cytoscape.
 }
 \usage{
 visualize(zscores, sig, format = "Cytoscape", type)
@@ -22,14 +21,13 @@ from the posterior distribution of the network (calculated in \code{\link{ebdbn}
 and the 0-1 matrix identifying the absence or presence of an edge 
 (calculated in \code{\link{zCutoff}}).
 
-The argument 'format' takes the value of "Rgraphviz" or 
-"Cytoscape", and is used to determine how results should be formatted.
-For the former, the package Rgraphviz is invoked to draw a directed
-graph. For the latter, a table is created where the first column contains the
-identification number of "from" nodes, the second column contains the
-identification number of "to" nodes, and the third column contains
-the interaction type (1 = activation, -1 = inhibition). This table can
-be input into Cytoscape to visualize the network. 
+The argument 'format' presently only takes the value of "Cytoscape", as
+the "Rgraphviz" package has been removed from the CRAN repository.
+To visualize results in Cytoscape, a table is created where the first 
+column contains the identification number of "from" nodes, the second 
+column contains the identification number of "to" nodes, and the third 
+column contains the interaction type (1 = activation, -1 = inhibition). 
+This table can then be input into Cytoscape to visualize the network. 
 
 The argument 'type' takes the value of feedback" or "input"
 depending on the type of network inferred. 
@@ -60,8 +58,5 @@ z <- zCutoff(net$DPost, net$DvarPost)
 ## Create results matrix for Cytoscape, based on 95 perc significance
 cytoscape.results <- visualize(z$z, z$z95, format = "Cytoscape", type = "feedback")
 
-## Visualize using Rgraphviz, if appropriately installed
-## library(Rgraphviz)
-## visualize(z$z, z$z95, format = "Rgraphviz", type = "feedback")
 }
 \keyword{methods}

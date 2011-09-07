@@ -13,8 +13,8 @@ empirical Bayes estimation procedure based on Dynamic Bayesian Networks.
 \tabular{ll}{
 Package: \tab ebdbNet\cr
 Type: \tab Package\cr
-Version: \tab 1.1\cr
-Date: \tab 2010-01-20\cr
+Version: \tab 1.2\cr
+Date: \tab 2011-09-07\cr
 License: \tab GPL (version 3 or later)\cr
 LazyLoad: \tab yes\cr
 }
@@ -28,7 +28,7 @@ Bayesian framework (see \code{\link{ebdbn}}).
 \author{
 Andrea Rau
 
-Maintainer: Andrea Rau <arau@stat.purdue.edu>
+Maintainer: Andrea Rau <andrea.rau@inria.fr>
 }
 \references{
 Andrea Rau, Florence Jaffrezic, Jean-Louis Foulley, and R. W. Doerge (2010). An Empirical

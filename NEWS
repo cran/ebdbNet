@@ -2,6 +2,14 @@
                 RELEASE HISTORY OF ebdbNet PACKAGE
              ========================================
 
+   		CHANGES IN ebdbNet VERSION 1.2
+
+Changes:
+- Author and maintainer contact information was updated.
+- References to the "Rgraphviz" package in the visualize function have been removed, 
+  as this package has been removed from the CRAN repository. In addition, Rgraphviz was
+  removed from the Suggests list for packages in the DESCRIPTION file of ebdbNet. 
+
    		CHANGES IN ebdbNet VERSION 1.1
 
 Changes:

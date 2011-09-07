@@ -37,24 +37,24 @@ function (zscores, sig, format = "Cytoscape", type = "feedback")
     }
 
   if (format == "Rgraphviz") {
-        require(Rgraphviz)
-        graph.par(list(nodes = list(fill = "lightgray", lwd = 2, 
-             fontsize = 10, textCol = "black")))
-        edges.full <- which(sig != 0, arr.ind = TRUE)
- 	if(type == "input") {
- 		edges <- cbind(paste("TF", edges.full[,2], sep = ""),
- 			paste("G", edges.full[,1], sep = ""))
- 	}
- 
-        V <- as.character(unique(as.vector(edges)))
-        gR <- new("graphNEL", nodes = V, edgemode = "directed")
-        gX <- addEdge(edges[,1], edges[,2], gR, abs(zscores[edges.full]))
-        nd <- nodes(gX)[degree(gX)[[1]] > 0 | degree(gX)[[2]] > 0]
-        gX <- subGraph(nd, gX)
-        edgeRenderInfo(gX) <- list(arrowhead = "normal", arrowtail = "none", 
-             lwd = 2)
-        gX2 <- layoutGraph(gX)
-        renderGraph(gX2)
-
+	print("Rgraphviz package has been removed from CRAN repository.")
+#        require(Rgraphviz)
+#        graph.par(list(nodes = list(fill = "lightgray", lwd = 2, 
+#            fontsize = 10, textCol = "black")))
+#        edges.full <- which(sig != 0, arr.ind = TRUE)
+# 	if(type == "input") {
+# 		edges <- cbind(paste("TF", edges.full[,2], sep = ""),
+# 			paste("G", edges.full[,1], sep = ""))
+# 	}
+# 
+#        V <- as.character(unique(as.vector(edges)))
+#        gR <- new("graphNEL", nodes = V, edgemode = "directed")
+#        gX <- addEdge(edges[,1], edges[,2], gR, abs(zscores[edges.full]))
+#        nd <- nodes(gX)[degree(gX)[[1]] > 0 | degree(gX)[[2]] > 0]
+#        gX <- subGraph(nd, gX)
+#        edgeRenderInfo(gX) <- list(arrowhead = "normal", arrowtail = "none", 
+#             lwd = 2)
+#        gX2 <- layoutGraph(gX)
+#        renderGraph(gX2)
      	}
 }
