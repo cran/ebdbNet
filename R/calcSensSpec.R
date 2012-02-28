@@ -1,4 +1,4 @@
-`sensitivity` <-
+`calcSensSpec` <-
 function(trueMatrix, estMatrix) 
 {
     	if(is.matrix(trueMatrix) != TRUE) {

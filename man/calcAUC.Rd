@@ -28,7 +28,6 @@ perfect performance.}
 AUC of the ROC curve
 }
 \author{Andrea Rau}
-\seealso{\code{\link{sensitivity}}}
 \examples{
 library(ebdbNet)
 tmp <- runif(1) ## Initialize random number generator

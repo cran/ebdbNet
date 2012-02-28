@@ -6,19 +6,20 @@ A function to infer the posterior mean and variance of network parameters
 using an empirical Bayes estimation procedure for a Dynamic Bayesian Network (DBN).
 }
 \usage{
-ebdbn(input = "feedback", y, K, conv.1 = 0.15, conv.2 = 0.05, 
-	conv.3 = 0.01, verbose = TRUE)
+ebdbn(y, K, input = "feedback", conv.1 = .15, conv.2 = .05, conv.3 = .01, verbose = TRUE)
 }
 \arguments{
-  \item{input}{"feedback" for feedback loop networks, or a list of R (MxT) matrices of input profiles}
-  \item{y}{A list of R (PxT) matrices of observed time course profiles}
+  \item{y}{A list of R (PxT) matrices of observed time course profiles (P genes, T time points)}
   \item{K}{Number of hidden states}
+  \item{input}{"feedback" for feedback loop networks, or a list of R (MxT) matrices of input profiles}
   \item{conv.1}{Value of convergence criterion 1}
   \item{conv.2}{Value of convergence criterion 2}
   \item{conv.3}{Value of convergence criterion 3}
   \item{verbose}{Verbose output}
 }
 \details{
+An object of class \code{ebdbNet}.
+
 This function infers the parameters of a network, based on the state space model
 \deqn{x_t = Ax_{t-1} + Bu_t + w_t}{x(t) = Ax(t-1) + Bu(t) + w(t)}
 \deqn{y_t = Cx_t + Du_t + z_t}{y(t) = Cx(t) + Du(t) + z(t)}
@@ -61,10 +62,8 @@ procedure conditioned on current estimates of the hidden states.
 \code{conv.1}, \code{conv.2}, and \code{conv.3} correspond to convergence
 criteria \eqn{\Delta_1}{Delta_1}, \eqn{\Delta_2}{Delta_2}, and
 \eqn{\Delta_3}{Delta_3} in the reference below, respectively.  After
-terminating the algorithm, the z-scores of the \eqn{C} and \eqn{D} matrices
-can be calculated by inputting \code{CPost} and \code{CvarPost} or \code{DPost}
-and \code{DvarPost}, respectively, into \code{\link{zCutoff}}. This in turn
-determines the presence or absence of edges in the network.
+terminating the algorithm, the z-scores of the \eqn{D} matrix is
+calculated, which in turn determines the presence or absence of edges in the network.
 
 See the reference below for additional details about the implementation of the
 algorithm. 
@@ -85,6 +84,7 @@ algorithm.
   \item{muEst }{Estimated value of \eqn{\mu}{mu}}
   \item{sigmaEst }{Estimated value of \eqn{\Sigma}{Sigma}}
   \item{alliterations }{Total number of iterations run}
+  \item{z }{Z-statistics calculated from the posterior distribution of matrix D}
 }
 \references{
 Andrea Rau, Florence Jaffrezic, Jean-Louis Foulley, and R. W. Doerge (2010). An Empirical
@@ -93,7 +93,7 @@ Applications in Genetics and Molecular Biology} 9. Article 9.
 }
 \author{Andrea Rau}
 
-\seealso{\code{\link{hankel}}, \code{\link{zCutoff}}, \code{\link{sensitivity}}}
+\seealso{\code{\link{hankel}}, \code{\link{calcSensSpec}}, \code{\link{plot.ebdbNet}}}
 \examples{
 library(ebdbNet)
 tmp <- runif(1) ## Initialize random number generator
@@ -103,7 +103,7 @@ set.seed(125214) ## Save seed
 R <- 5
 T <- 10
 P <- 10
-simData <- simFunc(R, T, P, v = rep(10, P), perc = 0.10)
+simData <- simulateVAR(R, T, P, v = rep(10, P), perc = 0.10)
 Dtrue <- simData$Dtrue
 y <- simData$y
 
@@ -121,12 +121,14 @@ for(r in 1:R) {
 ## K <- hankel(y)$dim
 
 ## Run algorithm	
-net <- ebdbn(input = u, y, K = 0, conv.1 = 0.15, conv.2 = 0.10, conv.3 = 0.10)
+net <- ebdbn(y = y, K = 0, input = u, conv.1 = 0.15, conv.2 = 0.10, conv.3 = 0.10,
+	verbose = TRUE)
 
-## Calculate sensitivities, specificities, and precisions of D matrix
-## Use z-score significance level of 95%
-z <- zCutoff(net$DPost, net$DvarPost)
-sens.95 <- sensitivity(Dtrue, z$z95)
+## Visualize results
+## Note: no edges here, which is unsurprising as inputs were randomly simulated
+## (in input networks, edges only go from inputs to genes)
+## plot(net, sig.level = 0.95)
+
 }
 \keyword{methods}
 \keyword{models}

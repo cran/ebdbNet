@@ -13,8 +13,8 @@ empirical Bayes estimation procedure based on Dynamic Bayesian Networks.
 \tabular{ll}{
 Package: \tab ebdbNet\cr
 Type: \tab Package\cr
-Version: \tab 1.2\cr
-Date: \tab 2011-09-07\cr
+Version: \tab 1.2.1\cr
+Date: \tab 2012-02-28\cr
 License: \tab GPL (version 3 or later)\cr
 LazyLoad: \tab yes\cr
 }
@@ -23,12 +23,12 @@ data based on a linear feedback state space model that allows for a set of hidde
 The algorithm is composed of three principal parts: choice of hidden state dimension
 (see \code{\link{hankel}}), estimation of hidden states via the Kalman filter and smoother, and calculation of
 posterior distributions based on the empirical Bayes estimation of hyperparameters in a hierarchical
-Bayesian framework (see \code{\link{ebdbn}}).
+Bayesian framework (see \code{\link{ebdbn}}). 
 }
 \author{
 Andrea Rau
 
-Maintainer: Andrea Rau <andrea.rau@inria.fr>
+Maintainer: Andrea Rau <andrea.rau AT jouy.inra.fr>
 }
 \references{
 Andrea Rau, Florence Jaffrezic, Jean-Louis Foulley, and R. W. Doerge (2010). An Empirical
@@ -51,12 +51,12 @@ tc44 <- combine.longitudinal(tcell.10, tcell.34)
 tcell.dat <- dataFormat(tc44)
 
 ## Use only subset of T-cell data for faster example
-R <- 5 ## 5 replicates
-T <- 10 ## 10 time points
-P <- 15 ## 15 genes
+R <- 20 ## 20 replicates
+P <- 10 ## 10 genes
 tcell.sub.dat <- vector("list", R)
+rep.sample <- sample(1:44, R)
 for(r in 1:R) {
-	tcell.sub.dat[[r]] <- tcell.dat[[r]][1:P, 1:T]
+	tcell.sub.dat[[r]] <- tcell.dat[[rep.sample[r]]][sample(1:58, P),]
 }
 
 ####################################################
@@ -65,10 +65,10 @@ for(r in 1:R) {
 ## Choose alternative value of K using hankel if hidden states to be estimated
 ## K <- hankel(tcell.sub.dat, lag = 1)$dim
 
-## Run algorithm
-net <- ebdbn(input = "feedback", tcell.sub.dat, K = 0, conv.1 = 0.10,
-	conv.2 = 0.01, conv.3 = 0.01)
+## Run algorithm (feedback network, no hidden states)
+net <- ebdbn(y = tcell.sub.dat, K = 0, input = "feedback", conv.1 = 0.01,
+	conv.2 = 0.01, conv.3 = 0.001, verbose = TRUE)
 
-## Use z-score significance level of 99%
-z <- zCutoff(net$DPost, net$DvarPost)$z99
+## Visualize results: in this example, mostly feedback loops
+## plot(net, sig.level = 0.5)
 }

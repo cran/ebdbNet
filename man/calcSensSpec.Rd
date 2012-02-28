@@ -1,12 +1,12 @@
-\name{sensitivity}
-\alias{sensitivity}
+\name{calcSensSpec}
+\alias{calcSensSpec}
 \title{Calculate Sensitivity and Specificity of a Network}
 \description{
 Function to calculate the true positives (TP), true negatives (TN), false positives (FP), and false
 negatives (FN) of an estimated network, given the structure of the true network.
 }
 \usage{
-sensitivity(trueMatrix, estMatrix)
+calcSensSpec(trueMatrix, estMatrix)
 }
 \arguments{
   \item{trueMatrix}{Posterior mean or adjacency matrix of the true network}
@@ -63,7 +63,7 @@ for(edge in 1:ceiling(0.25 * P * P)) {
 	}
 }
 
-check <- sensitivity(Dtrue, Dest)
+check <- calcSensSpec(Dtrue, Dest)
 check$TP ## 5 True Positives
 check$FP ## 20 False Positives
 check$TN ## 55 True Negatives

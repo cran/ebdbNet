@@ -1,6 +1,7 @@
 `ebdbn` <-
-function(input = "feedback", y, K, conv.1 = .15, conv.2 = .05, conv.3 = .01, verbose = TRUE) 
+function(y, K, input = "feedback", conv.1 = .15, conv.2 = .05, conv.3 = .01, verbose = TRUE)
 {
+
 	## M is input dimension (= P if feedback)
 	## alpha and gamma are of dimension K, beta and delta are of dimension M, v is of dimension P
 
@@ -104,9 +105,18 @@ function(input = "feedback", y, K, conv.1 = .15, conv.2 = .05, conv.3 = .01, ver
 	## Total number of iterations needed
 	alliterations <- test$alliterations
 
-	return(list(APost = APost, BPost = BPost, CPost = CPost, DPost = DPost, CvarPost = CvarPost, 
+	## Calculate z-statistics for D
+	Dvar <- matrix(0, nrow = P, ncol = M)
+	for(i in 1:P) Dvar[i,] <- diag(DvarPost[[i]]);
+	Dsd <- sqrt(Dvar)
+	z <- DPost / Dsd
+
+	results <- list(APost = APost, BPost = BPost, CPost = CPost, DPost = DPost, CvarPost = CvarPost, 
 		DvarPost = DvarPost, xPost = xPost, alphaEst = alphaEst, betaEst = betaEst, 
 		gammaEst = gammaEst, deltaEst = deltaEst, vEst = vEst, muEst = muEst, sigmaEst = sigmaEst,
-		alliterations = alliterations))
+		alliterations = alliterations, z = z)
+
+	class(results) <- "ebdbNet"
+	return(results)
 }
 

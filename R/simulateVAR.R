@@ -1,4 +1,4 @@
-`simFunc` <-
+`simulateVAR` <-
 function(R, T, P, v, perc) {
 
 	## Create D matrix with perc% of possible edges non-null

@@ -1,12 +1,12 @@
-\name{simFunc}
-\alias{simFunc}
+\name{simulateVAR}
+\alias{simulateVAR}
 \title{Simulate Simple Autoregressive Process}
 \description{
 Function to simulate a simple autoregressive process based on a network
 adjacency matrix with a given percentage of non-zero elements.
 }
 \usage{
-simFunc(R, T, P, v, perc)
+simulateVAR(R, T, P, v, perc)
 }
 \arguments{
   \item{R}{Number of replicates}
@@ -33,7 +33,7 @@ tmp <- runif(1) ## Initialize random number generator
 set.seed(125214) ## Save seed
 
 ## Simulate data
-simData <- simFunc(R = 5, T = 10, P = 10, v = rep(10, 10), perc = 0.10)
+simData <- simulateVAR(R = 5, T = 10, P = 10, v = rep(10, 10), perc = 0.10)
 Dtrue <- simData$Dtrue
 y <- simData$y
 }
