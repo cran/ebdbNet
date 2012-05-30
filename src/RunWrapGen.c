@@ -41,7 +41,7 @@ void RunWrapGen(int *R, int *P, int *T, int *K, int *M, double *xx,
 
     if(*verboseInd == 1) {
         Rprintf("Running EBDBN algorithm ...\n");
-        Rprintf("\n");
+       Rprintf("\n");
         if(*K > 0) {Rprintf("Iterations:\n");}
     }
 
@@ -51,7 +51,6 @@ void RunWrapGen(int *R, int *P, int *T, int *K, int *M, double *xx,
 }
 
 /* Include other programs */
-
 /******************************************************************/
 /*  This is the counterpart of Overall_Posterior_Mean.R. It has   */
 /*  inputs alpha, beta, gamma, delta, v, x, y, u, K, P, T, R, & M */
@@ -68,7 +67,7 @@ void PostMeanOverall(double *alpha, double *beta, double *gamma, double *delta,
 	int i, *all, j, jj, index, *KK, index2, m, mm;
     double **MNLNinv, **LNMNinv, **JGFGinv, **FGJGinv, ***HNLS,
             ***SNMH, ***EGFQ, ***QGJE, **matk1, **matm1, **Dvartemp,
-            **D, ***Dvar, ***Cvar, **C, **B, **A;
+            **D, **C, **B, **A, ***Dvar, ***Cvar;
 
 	/* Load subprograms */
 	void SimplifyNoX(double*, double*, double***, double***, int*, int*, int*, int*, int*, double**,
@@ -128,7 +127,7 @@ void PostMeanOverall(double *alpha, double *beta, double *gamma, double *delta,
             {
                 for(mm=0; mm<*M; mm++)
                 {
-                    *(*(*(Dvar+i)+m)+mm) = (1.0/(*(v+i))) * (*(*(Dvartemp+m)+mm));
+                   *(*(*(Dvar+i)+m)+mm) = (1.0/(*(v+i))) * (*(*(Dvartemp+m)+mm));
                 }
             }
         }
@@ -1387,6 +1386,7 @@ void EmTypeConv(double *alpha, double *beta, double *gamma,
        New estimates are put back into alpha, beta, gamma, delta
        Use convergence criterion conv1 */
     HyperMax(alpha, beta, gamma, delta, v, x, y, u, K, P, T, R, M, conv1, subiterations);
+
     /* Estimation of gene precisions, v
        New estimate of v is put back into v */
     PostMeanR(alpha, beta, gamma, delta, v, x, y, u, K, P, T, R, M, A, B, C,
@@ -1543,7 +1543,8 @@ void HyperMax(double *alpha, double *beta, double *gamma, double *delta,
     if(*K > 0)
     {
         while(convergence > *conv)
-        {
+       {
+            /* Rprintf("Sub convergence = %f, \n", convergence); */
             if(iter > *subiterations) break;
 
             for(r=0; r<*R; r++)
@@ -2419,16 +2420,17 @@ void SimplifyX(double *alpha, double *beta, double *gamma, double *delta,
 	double ***QGJE)
 {
 	int rlower = 0, rupper = 0, i, j, jj, r, t, *one, m, mm;
-	double **xXx, **uXx, **uXu, **xXu, ***H, ***S, **MM, **N, **L, **xtemp,
-		**txtemp, **utemp, **tutemp, *xsingle, *ysingle, **J, **G,
-		**F, ***E, ***Q, **Linv, **Minv, **Finv, **Jinv, *det, **Nt, **Gt,
+	double **xXx, **uXx, **uXu, **xXu, **xtemp,
+		**txtemp, **utemp, **tutemp, *xsingle, *ysingle, *det,
+       **J, **G, ***H, ***S, **MM, **N, **L,
+		**F, ***E, ***Q, **Linv, **Minv, **Finv, **Jinv, **Nt, **Gt,
 		**matkk, **matmm, **matkm, **matmk;
 
 	/* Allocate memory, set M, N, L, H, and S = 0 */
 	/* Allocate memory, set J, G, F, E, and Q = 0 */
 
 	one = (int*) calloc(1, sizeof(int));
-	det = (double*) calloc(1, sizeof(double));
+    det = (double*) calloc(1, sizeof(double));
     H = (double***) calloc(*K, sizeof(double**));
     S = (double***) calloc(*K, sizeof(double**));
     MM = (double**) calloc(*K, sizeof(double*));
@@ -2473,7 +2475,9 @@ void SimplifyX(double *alpha, double *beta, double *gamma, double *delta,
 	for(i=0; i<*P; i++)
 	{
 		*(E + i) = (double**) calloc(*K, sizeof(double*));
-		*(Q + i) = (double**) calloc(*P, sizeof(double*));
+		/* ERROR: MAY 30, 2012 */
+        /* *(Q + i) = (double**) calloc(*P, sizeof(double*)); */
+		*(Q + i) = (double**) calloc(*M, sizeof(double*));
 		for(j=0; j<*K; j++)
 		{
 			*(*(E+i)+j) = (double*) calloc(1, sizeof(double));
@@ -2525,7 +2529,7 @@ void SimplifyX(double *alpha, double *beta, double *gamma, double *delta,
 	}
 	*one = 1;
 
-	/* Begin function part 1 (corresponds to simplify.1 in R code) */
+    /* Begin function part 1 (corresponds to simplify.1 in R code) */
 	for(r=rlower; r<rupper; r++)
 	{
         for(t=1; t<*T; t++)
@@ -2903,6 +2907,7 @@ void SimplifyNoX(double *delta, double *v, double ***y, double ***u, int *P, int
 	utemp = (double**) calloc(*M, sizeof(double*));
 	tutemp = (double**) calloc(1, sizeof(double*));
 	DmeanNoxt = (double**) calloc(*M, sizeof(double*));
+
 	for(m=0; m<*M; m++)
 	{
 	    *(m1+m) = (double*) calloc(*M, sizeof(double));
@@ -2952,8 +2957,8 @@ void SimplifyNoX(double *delta, double *v, double ***y, double ***u, int *P, int
 		}
 	}
 
-	/* Begin function, Part 2 */
-	/* Corresponds to simplify in R code */
+	/* Begin function, Part 2
+	 Corresponds to simplify in R code */
 
 	for(m=0; m<*M; m++)
 	{
@@ -2961,7 +2966,7 @@ void SimplifyNoX(double *delta, double *v, double ***y, double ***u, int *P, int
 	}
 
 	/* This is the base variance, to get actual variance for each row, need to multiply by v_i^(-1) */
-	MatrixInv(m1, *M, DvarNox, det);\
+	MatrixInv(m1, *M, DvarNox, det);
 
 	/* This is the mean */
 	MatrixMult(DvarNox,*M,*M,m2,*P,DmeanNoxt);
@@ -3040,7 +3045,6 @@ void MatrixInv(double **mat, int n, double **invmat, double *det)
 	/* Calculate the determinate of the matrix */
 	*det=0;
 	for(i=0; i<n; i++) *det += log(*(w+i));
-
 	/* Free memory */
 	for(i=0; i<n; i++)
 	{
@@ -3122,3 +3126,7 @@ void MatrixTrans(double **m, double **mt, int *row, int *col)
 		}
 	}
 }
+
+#ifdef win32
+            R_FlushConsole();
+#endif

@@ -6,12 +6,15 @@ A function to visualize graph estimated using the Empirical Bayes Dynamic Bayesi
 algorithm.
 }
 \usage{
-\method{plot}{ebdbNet}(x, sig.level, interactive = FALSE, ...)
+\method{plot}{ebdbNet}(x, sig.level, interactive = FALSE, clarify = "TRUE",
+layout = layout.fruchterman.reingold,  ...)
 }
 \arguments{
   \item{x}{ An object of class \code{"ebdbNet"}}
   \item{sig.level}{Desired significance level (between 0 and 1) for edges in network}
   \item{interactive}{If TRUE, interactive plotting through tkplot}
+  \item{clarify}{If TRUE, unconnected nodes should be removed from the plot}
+  \item{layout}{Layout parameter for graphing network using igraph0}
   \item{...}{Additional arguments (mainly useful for plotting)}
 }
 \details{

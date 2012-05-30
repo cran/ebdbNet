@@ -1,5 +1,5 @@
 `ebdbn` <-
-function(y, K, input = "feedback", conv.1 = .15, conv.2 = .05, conv.3 = .01, verbose = TRUE)
+function(y, K, input = "feedback", conv.1 = .15, conv.2 = .05, conv.3 = .01, verbose = TRUE, max.iter = 100, max.subiter = 200)
 {
 
 	## M is input dimension (= P if feedback)
@@ -50,7 +50,7 @@ function(y, K, input = "feedback", conv.1 = .15, conv.2 = .05, conv.3 = .01, ver
 	CPost <- rep(0, P*K)
 	CvarPost <- rep(0, P*K*K)
 	DPost <- rep(0, P*M)
-	DvarPost <- rep(0, M*P*P)
+	DvarPost <- rep(0, M*M*P)
 
 	if(K>0) {x0 <- as.vector(t(do.call(rbind, x.0)))}
 	if(K==0) {x0 <- 0}
@@ -71,7 +71,7 @@ function(y, K, input = "feedback", conv.1 = .15, conv.2 = .05, conv.3 = .01, ver
 		BPost = as.double(BPost), CPost = as.double(CPost),
 		DPost = as.double(DPost), CvarPost = as.double(CvarPost),
 		DvarPost = as.double(DvarPost), alliterations = as.integer(0), 
-		maxiterations = as.integer(100), subiterations = as.integer(200), 
+		maxiterations = as.integer(max.iter), subiterations = as.integer(max.subiter), 
 		verboseInd = as.integer(verboseInd), PACKAGE = "ebdbNet")
 
 	## Estimated Posterior Mean and Variance
@@ -111,10 +111,20 @@ function(y, K, input = "feedback", conv.1 = .15, conv.2 = .05, conv.3 = .01, ver
 	Dsd <- sqrt(Dvar)
 	z <- DPost / Dsd
 
+	rownames(DPost) <- rownames(z) <- rownames(y[[1]])
+	if(is.list(input) == TRUE) {
+		colnames(DPost) <- colnames(z) <- rownames(u[[1]])
+	}
+	if(is.list(input) == FALSE) {
+		colnames(DPost) <- colnames(z) <- rownames(y[[1]])
+	}
+	type <- ifelse(is.list(input) == TRUE, "input", "feedback")
+
+
 	results <- list(APost = APost, BPost = BPost, CPost = CPost, DPost = DPost, CvarPost = CvarPost, 
 		DvarPost = DvarPost, xPost = xPost, alphaEst = alphaEst, betaEst = betaEst, 
 		gammaEst = gammaEst, deltaEst = deltaEst, vEst = vEst, muEst = muEst, sigmaEst = sigmaEst,
-		alliterations = alliterations, z = z)
+		alliterations = alliterations, z = z, type = type)
 
 	class(results) <- "ebdbNet"
 	return(results)

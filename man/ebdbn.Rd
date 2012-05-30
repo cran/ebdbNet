@@ -6,7 +6,8 @@ A function to infer the posterior mean and variance of network parameters
 using an empirical Bayes estimation procedure for a Dynamic Bayesian Network (DBN).
 }
 \usage{
-ebdbn(y, K, input = "feedback", conv.1 = .15, conv.2 = .05, conv.3 = .01, verbose = TRUE)
+ebdbn(y, K, input = "feedback", conv.1 = .15, conv.2 = .05, conv.3 = .01, verbose = TRUE,
+max.iter = 100, max.subiter = 200)
 }
 \arguments{
   \item{y}{A list of R (PxT) matrices of observed time course profiles (P genes, T time points)}
@@ -16,6 +17,8 @@ ebdbn(y, K, input = "feedback", conv.1 = .15, conv.2 = .05, conv.3 = .01, verbos
   \item{conv.2}{Value of convergence criterion 2}
   \item{conv.3}{Value of convergence criterion 3}
   \item{verbose}{Verbose output}
+  \item{max.iter}{Maximum overall iterations (default value is 100)}
+  \item{max.subiter}{Maximum iterations for hyperparameter updates (default value is 200)}
 }
 \details{
 An object of class \code{ebdbNet}.
@@ -85,6 +88,7 @@ algorithm.
   \item{sigmaEst }{Estimated value of \eqn{\Sigma}{Sigma}}
   \item{alliterations }{Total number of iterations run}
   \item{z }{Z-statistics calculated from the posterior distribution of matrix D}
+  \item{type }{Either "input" or "feedback", as specified by the user}
 }
 \references{
 Andrea Rau, Florence Jaffrezic, Jean-Louis Foulley, and R. W. Doerge (2010). An Empirical

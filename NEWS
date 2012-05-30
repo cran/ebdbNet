@@ -2,6 +2,15 @@
                 RELEASE HISTORY OF ebdbNet PACKAGE
              ========================================
 
+		CHANGES IN ebdbNet VERSION 1.2.2
+
+Changes:
+- Dependencies to the igraph package were switched over to the compatability version igraph0.
+- Fixed bug in R code and bug in C code (line 2478) that caused memory crashes when the number of inputs was greater 
+  than the number of genes. Many thanks to A. Baeza for pointing out this bug!
+- Small changes made to plot.ebdbNet function to allow variable names to be graphed directly and to clarify 
+  presentation of results.
+
 		CHANGES IN ebdbNet VERSION 1.2.1
 
 Changes:
