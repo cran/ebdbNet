@@ -2,6 +2,13 @@
                 RELEASE HISTORY OF ebdbNet PACKAGE
              ========================================
 
+		CHANGES IN ebdbNet VERSION 1.2.3
+
+Changes:
+- Fixed small bug in dataFormat and plotting functions. Many thanks to Slemain Bassim for pointing out these bugs!
+- Update dependencies to replace igraph0 with igraph.
+
+
 		CHANGES IN ebdbNet VERSION 1.2.2
 
 Changes:

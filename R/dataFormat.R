@@ -10,7 +10,7 @@ function(longitudinal.data)
 
 	dat <- vector("list", R)
 	for(r in 1:R) {
-		dat[[r]] <- t(longitudinal.data[seq(from = 4, to = R*T, by = R),])
+		dat[[r]] <- t(longitudinal.data[seq(from = r, to = R*T, by = R),])
 	}
 
 	return(dat)

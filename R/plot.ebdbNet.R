@@ -1,5 +1,3 @@
-
-
 `plot.ebdbNet` <-
 function (x, sig.level, interactive = "FALSE", clarify = "TRUE",
 	layout = layout.fruchterman.reingold, ...) 
@@ -81,7 +79,7 @@ function (x, sig.level, interactive = "FALSE", clarify = "TRUE",
 		if(is.matrix(tmp) == FALSE) tmp <- matrix(tmp, nrow = 1);
 		if(is.matrix(tmp) == TRUE) tmp <- as.vector(t(tmp));
 		nodes <- c(rep(0, ncol(ebdbn.net)), rep(1, nrow(ebdbn.net)))
-		edges <- tmp - 1
+		edges <- tmp
 		ebdbn.igraph <- graph.bipartite(types = nodes,
 			edges = edges, directed = TRUE)
 
@@ -98,5 +96,4 @@ function (x, sig.level, interactive = "FALSE", clarify = "TRUE",
 	}
 
 }
-
 
