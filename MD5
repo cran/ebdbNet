@@ -1,6 +1,6 @@
-0c77f01e1b0dafd87a97c8777f15ea99 *DESCRIPTION
-21dd3a1010d57501108510f538ee35f2 *NAMESPACE
-beb4d24bd0d9dbfbe8552e3d80daa064 *NEWS
+dd809c7b111f704156bea649ed2239b4 *DESCRIPTION
+79aa2dfd00ce04ab2fce3e06deff1612 *NAMESPACE
+1738628eff8cee3e9648cb3ae431a6d2 *NEWS
 69ee630a6415c2872a114aa92f589a90 *R/calcAUC.R
 02ff55baf827632d3d4d7b01ae8b8608 *R/calcSensSpec.R
 8421f4b46c6481460de234f13ebc40f6 *R/dataFormat.R
@@ -10,11 +10,12 @@ e95d2c456dbce8f886dd1bc4300b1c41 *R/ebdbn.R
 fa708857b139907b4ac3870e8372b950 *R/plot.ebdbNet.R
 3e7529c58f1bb4366bc1f1d4ae9065f9 *R/simulateVAR.R
 4f008fe6d24e6bfdb6a2ce4f3dc2123a *R/sumFunc.R
-aa8c58afad451d7083c0c2d27a64583e *inst/CITATION
+75d3d5fa47ac0a2679c20d233cd73caa *README.md
+95f51e587b0fb3a87baeeea726b105aa *inst/CITATION
 ff389a4f6f2857e4e3fe714efae952b1 *man/calcAUC.Rd
 4954447b87ad04d198cfcff332f7ed00 *man/calcSensSpec.Rd
 375fbe686188f47bb2ce97cb25e06845 *man/dataFormat.Rd
-250c2e585184b5c533dad0c64aa11078 *man/ebdbNet-package.Rd
+09f1ac778b5273933e94e7ab78958a99 *man/ebdbNet-package.Rd
 848c36687a376f5d718d998081b69520 *man/ebdbn-internal.Rd
 c731cb1684463b162f1fb80d0305ca6c *man/ebdbn.Rd
 ef332d372792a3b3e605ae7108016d59 *man/hankel.Rd
