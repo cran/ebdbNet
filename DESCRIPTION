@@ -1,8 +1,8 @@
 Package: ebdbNet
 Type: Package
 Title: Empirical Bayes Estimation of Dynamic Bayesian Networks
-Version: 1.2.7
-Date: 2023-03-27
+Version: 1.2.8
+Date: 2023-09-04
 Author: Andrea Rau <andrea.rau@inra.fr>
 Maintainer: Andrea Rau <andrea.rau@inra.fr>
 Depends: R (>= 4.1.0), igraph
@@ -15,6 +15,6 @@ License: GPL (>= 3)
 URL: https://github.com/andreamrau/ebdbNet
 LazyLoad: yes
 NeedsCompilation: yes
-Packaged: 2023-03-28 07:43:55 UTC; araul
+Packaged: 2023-09-04 14:18:44 UTC; araul
 Repository: CRAN
-Date/Publication: 2023-03-28 08:00:02 UTC
+Date/Publication: 2023-09-04 15:10:02 UTC
